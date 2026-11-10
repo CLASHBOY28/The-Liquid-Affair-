@@ -381,8 +381,8 @@ def chat_fn(message, history):
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": message})
     try:
-        response = gemini_chat_completion(
-            model=MODEL, messages=messages, tools=TOOLS,
+        response = ai_chat_completion(
+            model=CLOUDFLARE_MODEL, messages=messages, tools=TOOLS,
             tool_choice="auto", parallel_tool_calls=False,
         )
     except APIStatusError as exc:
@@ -401,8 +401,8 @@ def chat_fn(message, history):
             result = f"ERROR: {type(exc).__name__}: {exc}"
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
     try:
-        follow_up = gemini_chat_completion(
-            model=MODEL, messages=messages, tools=TOOLS,
+        follow_up = ai_chat_completion(
+            model=CLOUDFLARE_MODEL, messages=messages, tools=TOOLS,
             tool_choice="auto",
         )
         return follow_up.choices[0].message.content or "The tool operation finished."
