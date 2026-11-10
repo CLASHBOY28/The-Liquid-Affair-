@@ -417,7 +417,6 @@ def refresh_all():
         gr.update(choices=[r["name"] for r in items]),
         gr.update(choices=[c["name"] for c in cats]),
         gr.update(choices=[f["name"] for f in custom_fields_list()]),
-        gr.update(choices=[f["name"] for f in custom_fields_list()]),
     )
 
 
