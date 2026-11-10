@@ -515,9 +515,11 @@ APP_CSS = """
 .gradio-container .block {border-radius: 14px !important;}
 .gradio-container input, .gradio-container textarea {border-radius: 10px !important;}
 .gradio-container button {border-radius: 10px !important; font-weight: 650 !important;}
-/* Keep inventory headings readable on phones; allow sideways scrolling for wide tables. */
-.gradio-container .table-wrap, .gradio-container .table-container, .gradio-container .dataframe-container {overflow-x:auto !important;}
-.gradio-container .dataframe-container table th, .gradio-container .dataframe-container table td {white-space:nowrap !important; min-width:76px;}
+/* Keep inventory columns readable on phones instead of squeezing every column. */
+.gradio-container .table-wrap, .gradio-container .table-container, .gradio-container .dataframe-container {display:block !important; max-width:100% !important; overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;}
+.gradio-container .table-wrap table, .gradio-container .table-container table, .gradio-container .dataframe-container table {min-width:980px !important; width:max-content !important; table-layout:auto !important;}
+.gradio-container .table-wrap th, .gradio-container .table-wrap td, .gradio-container .table-container th, .gradio-container .table-container td, .gradio-container .dataframe-container th, .gradio-container .dataframe-container td {white-space:nowrap !important; min-width:88px !important; padding:10px 12px !important;}
+@media(max-width:600px) {.gradio-container {padding:8px !important;} .gradio-container .block {padding:10px !important;}}
 """
 
 
