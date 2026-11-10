@@ -26,7 +26,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
 def gemini_chat_completion(**kwargs):
-    """Retry transient Gemini errors, then fall back to another supported model."""
+    """Use a short retry for temporary outages, then try the fallback model."""
     requested_model = kwargs.get("model", MODEL)
     models = [requested_model]
     fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
@@ -34,17 +34,21 @@ def gemini_chat_completion(**kwargs):
         models.append(fallback_model)
 
     last_error = None
-    for model in models:
-        for attempt in range(3):
+    for model_index, model in enumerate(models):
+        # One quick retry on the primary model; do not repeatedly retry 429 quota limits.
+        max_attempts = 2 if model_index == 0 else 1
+        for attempt in range(max_attempts):
             try:
                 request = dict(kwargs)
                 request["model"] = model
                 return ai_client.chat.completions.create(**request)
             except APIStatusError as exc:
                 last_error = exc
-                if exc.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+                if exc.status_code == 429:
                     break
-                time.sleep(2 ** attempt)
+                if exc.status_code not in (500, 502, 503, 504) or attempt + 1 >= max_attempts:
+                    break
+                time.sleep(1)
     raise last_error
 
 
