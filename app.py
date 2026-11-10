@@ -74,7 +74,7 @@ def categories_list():
 
 def inventory_records():
     result = (supabase.table("inventory_items")
-              .select("id, name, quantity, unit, reorder_threshold, updated_at, categories(name)")
+              .select("id, name, quantity, unit, reorder_threshold, expiry_date, updated_at, categories(name)")
               .order("name").execute())
     return result.data or []
 
@@ -89,7 +89,8 @@ def inventory_rows(low_only: bool = False):
         rows.append([
             item["id"], item["name"], category.get("name", "Uncategorised"),
             item["quantity"], item.get("unit") or "pcs",
-            item["reorder_threshold"], item.get("updated_at", "")
+            item["reorder_threshold"], item.get("expiry_date") or "",
+            item.get("updated_at", "")
         ])
     return rows
 
@@ -110,7 +111,7 @@ def write_audit(item_name, action, old_qty=None, new_qty=None, note=None):
     }).execute()
 
 
-def save_item(name, category, quantity, threshold, unit):
+def save_item(name, category, quantity, threshold, unit, expiry_date=None):
     name = (name or "").strip()
     category = (category or "").strip()
     unit = (unit or "pcs").strip() or "pcs"
@@ -119,6 +120,9 @@ def save_item(name, category, quantity, threshold, unit):
     if quantity is None or int(quantity) < 0 or threshold is None or int(threshold) < 0:
         raise ValueError("Quantity and reorder threshold must be zero or greater.")
     quantity, threshold = int(quantity), int(threshold)
+    expiry_date = (expiry_date or "").strip() or None
+    if expiry_date:
+        datetime.strptime(expiry_date, "%Y-%m-%d")
     cat_id = category_id_for(category, create=True)
     found = (supabase.table("inventory_items").select("id, quantity")
              .eq("name", name).eq("category_id", cat_id).limit(1).execute())
@@ -126,13 +130,14 @@ def save_item(name, category, quantity, threshold, unit):
         old = found.data[0]["quantity"]
         (supabase.table("inventory_items").update({
             "quantity": quantity, "reorder_threshold": threshold,
-            "unit": unit, "updated_at": datetime.now(timezone.utc).isoformat()
+            "unit": unit, "expiry_date": expiry_date,
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", found.data[0]["id"]).execute())
         write_audit(name, "set_quantity", old, quantity, "Dashboard")
         return f"Updated {name}: {old} → {quantity} {unit}."
     (supabase.table("inventory_items").insert({
         "name": name, "category_id": cat_id, "quantity": quantity,
-        "reorder_threshold": threshold, "unit": unit
+        "reorder_threshold": threshold, "unit": unit, "expiry_date": expiry_date
     }).execute())
     write_audit(name, "create", None, quantity, "Dashboard")
     return f"Added {name}: {quantity} {unit}."
@@ -187,7 +192,8 @@ TOOLS = [
          "name": {"type": "string"}, "category": {"type": "string"},
          "quantity": {"type": "integer", "minimum": 0},
          "reorder_threshold": {"type": "integer", "minimum": 0},
-         "unit": {"type": "string"}},
+         "unit": {"type": "string"},
+         "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
          "required": ["name", "category", "quantity"]}}},
     {"type": "function", "function": {"name": "adjust_stock",
      "description": "Increase or decrease an existing item's stock by a delta.",
@@ -211,7 +217,8 @@ def execute_tool(name: str, args: dict[str, Any]) -> str:
     try:
         if name == "add_or_update_item":
             return save_item(args["name"], args["category"], args["quantity"],
-                             args.get("reorder_threshold", 5), args.get("unit", "pcs"))
+                             args.get("reorder_threshold", 5), args.get("unit", "pcs"),
+                             args.get("expiry_date"))
         if name == "adjust_stock":
             return adjust_item(args["name"], args["category"], args["delta"])
         if name == "list_inventory":
@@ -299,9 +306,9 @@ def refresh_all():
     )
 
 
-def add_item_ui(name, category, quantity, threshold, unit):
+def add_item_ui(name, category, quantity, threshold, unit, expiry_date):
     try:
-        message = save_item(name, category, quantity, threshold, unit)
+        message = save_item(name, category, quantity, threshold, unit, expiry_date)
         return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
     except Exception as exc:
         return f"Could not save item: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
@@ -387,7 +394,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
             refresh_button = gr.Button("Refresh dashboard")
             gr.Markdown("#### Low-stock items")
             low_table = gr.Dataframe(
-                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Updated"],
+                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
                 interactive=False, wrap=True
             )
         with gr.Tab("Inventory"):
@@ -399,6 +406,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
                 item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
                 item_unit = gr.Textbox(label="Unit", value="bottles")
                 item_threshold = gr.Number(label="Reorder threshold", value=5, precision=0)
+            item_expiry = gr.Textbox(label="Expiry date (YYYY-MM-DD, optional)", placeholder="2027-06-30")
             save_button = gr.Button("Save item", variant="primary")
             save_status = gr.Markdown()
             gr.Markdown("#### Adjust existing stock (+/-)")
@@ -410,7 +418,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
             adjust_status = gr.Markdown()
             gr.Markdown("#### All inventory")
             inventory_table = gr.Dataframe(
-                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Updated"],
+                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
                 interactive=False, wrap=True
             )
         with gr.Tab("Categories"):
@@ -437,7 +445,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
         add_item_ui,
-        inputs=[item_name, item_category, item_quantity, item_threshold, item_unit],
+        inputs=[item_name, item_category, item_quantity, item_threshold, item_unit, item_expiry],
         outputs=[save_status, summary, inventory_table, low_table, audit_table],
     )
     adjust_button.click(
