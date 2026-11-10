@@ -15,7 +15,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
