@@ -611,7 +611,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
                 interactive=False, wrap=True
             )
 
-    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field, manage_field]
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field]
     demo.load(refresh_all, outputs=refresh_outputs)
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
