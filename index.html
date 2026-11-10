@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Liquid Affair - Inventory</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111827;
+      color: white;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #d4af37; }
+    input, button, select {
+      padding: 12px;
+      margin: 5px 0;
+      border-radius: 6px;
+      border: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      background: #d4af37;
+      color: #111;
+      font-weight: bold;
+    }
+    .card {
+      background: #1f2937;
+      padding: 15px;
+      margin: 12px 0;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>THE LIQUID AFFAIR</h1>
+<p>Inventory Management System</p>
+
+<div class="card">
+  <h3>Add Category</h3>
+  <input id="category" placeholder="Category name">
+  <button onclick="addCategory()">Add Category</button>
+</div>
+
+<div class="card">
+  <h3>Add Stock</h3>
+  <input id="item" placeholder="Product name">
+  <select id="itemCategory"></select>
+  <input id="quantity" type="number" placeholder="Quantity">
+  <input id="unit" placeholder="Unit (litres, bottles, packs)">
+  <button onclick="addStock()">Add Stock</button>
+</div>
+
+<div class="card">
+  <h3>Current Inventory</h3>
+  <div id="inventory"></div>
+</div>
+
+<script>
+let categories = JSON.parse(localStorage.getItem("categories") || "[]");
+let inventory = JSON.parse(localStorage.getItem("inventory") || "[]");
+
+function save() {
+  localStorage.setItem("categories", JSON.stringify(categories));
+  localStorage.setItem("inventory", JSON.stringify(inventory));
+}
+
+function addCategory() {
+  const name = document.getElementById("category").value.trim();
+  if (!name) return alert("Enter category name");
+  if (categories.includes(name)) return alert("Category already exists");
+
+  categories.push(name);
+  document.getElementById("category").value = "";
+  save();
+  render();
+}
+
+function addStock() {
+  const name = document.getElementById("item").value.trim();
+  const category = document.getElementById("itemCategory").value;
+  const quantity = Number(document.getElementById("quantity").value);
+  const unit = document.getElementById("unit").value.trim() || "pcs";
+
+  if (!name || !category || !Number.isFinite(quantity) || quantity < 0) {
+    return alert("Enter valid stock details");
+  }
+
+  const existing = inventory.find(x =>
+    x.name.toLowerCase() === name.toLowerCase() &&
+    x.category === category
+  );
+
+  if (existing) {
+    existing.quantity += quantity;
+  } else {
+    inventory.push({name, category, quantity, unit});
+  }
+
+  document.getElementById("item").value = "";
+  document.getElementById("quantity").value = "";
+  save();
+  render();
+}
+
+function render() {
+  const select = document.getElementById("itemCategory");
+  select.innerHTML = categories.map(c =>
+    `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`
+  ).join("");
+
+  document.getElementById("inventory").innerHTML =
+    inventory.map(x => `
+      <div class="card">
+        <strong>${escapeHTML(x.name)}</strong><br>
+        ${escapeHTML(x.category)}<br>
+        ${x.quantity} ${escapeHTML(x.unit)}
+      </div>
+    `).join("") || "No stock added yet.";
+}
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, c => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;",
+    '"':"&quot;", "'":"&#39;"
+  })[c]);
+}
+
+render();
+</script>
+
+</body>
+</html>
