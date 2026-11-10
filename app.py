@@ -3,8 +3,11 @@ import os
 from typing import Any
 
 import gradio as gr
+from dotenv import load_dotenv
 from openai import OpenAI
 from supabase import Client, create_client
+
+load_dotenv()  # Loads a local .env during development; hosting secrets take precedence.
 
 # Configure these as server-side environment variables. Never expose the
 # Supabase service-role key or OpenAI key in browser JavaScript.
