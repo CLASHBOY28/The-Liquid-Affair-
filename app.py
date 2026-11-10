@@ -72,11 +72,46 @@ def categories_list():
     return result.data or []
 
 
+def custom_fields_list():
+    try:
+        result = (supabase.table("inventory_custom_fields")
+                  .select("id, name, field_type, position")
+                  .order("position").execute())
+        return result.data or []
+    except Exception:
+        return []
+
+
 def inventory_records():
     result = (supabase.table("inventory_items")
-              .select("id, name, quantity, unit, reorder_threshold, expiry_date, updated_at, categories(name)")
+              .select("id, name, quantity, unit, reorder_threshold, expiry_date, custom_values, updated_at, categories(name)")
               .order("name").execute())
     return result.data or []
+
+
+def inventory_headers():
+    return ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date"] + [
+        field["name"] for field in custom_fields_list()
+    ] + ["Updated"]
+
+
+def inventory_rows(low_only: bool = False):
+    records = inventory_records()
+    if low_only:
+        records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
+    fields = custom_fields_list()
+    rows = []
+    for item in records:
+        category = item.get("categories") or {}
+        custom = item.get("custom_values") or {}
+        rows.append([
+            item["id"], item["name"], category.get("name", "Uncategorised"),
+            item["quantity"], item.get("unit") or "pcs",
+            item["reorder_threshold"], item.get("expiry_date") or "",
+            *[custom.get(field["name"], "") for field in fields],
+            item.get("updated_at", "")
+        ])
+    return rows
 
 
 def inventory_rows(low_only: bool = False):
@@ -141,6 +176,80 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None):
     }).execute())
     write_audit(name, "create", None, quantity, "Dashboard")
     return f"Added {name}: {quantity} {unit}."
+
+
+def add_custom_field(name, field_type="text"):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Enter a column name.")
+    reserved = {h.lower() for h in ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"]}
+    if name.lower() in reserved:
+        raise ValueError("That name is already used by a standard inventory column.")
+    existing = [f["name"].lower() for f in custom_fields_list()]
+    if name.lower() in existing:
+        raise ValueError("That custom column already exists.")
+    if field_type not in ("text", "number", "date"):
+        field_type = "text"
+    supabase.table("inventory_custom_fields").insert({
+        "name": name, "field_type": field_type,
+        "position": len(existing) + 1
+    }).execute()
+    return f"Added the '{name}' column."
+
+
+def move_custom_field(name, direction):
+    fields = custom_fields_list()
+    index = next((i for i, field in enumerate(fields) if field["name"] == name), None)
+    if index is None:
+        raise ValueError("Choose a custom column.")
+    other = index - 1 if direction == "up" else index + 1
+    if other < 0 or other >= len(fields):
+        return "That column is already at the edge."
+    first, second = fields[index], fields[other]
+    supabase.table("inventory_custom_fields").update({"position": second["position"]}).eq("id", first["id"]).execute()
+    supabase.table("inventory_custom_fields").update({"position": first["position"]}).eq("id", second["id"]).execute()
+    return f"Moved '{name}' {direction}."
+
+
+def remove_custom_field(name):
+    field = next((f for f in custom_fields_list() if f["name"] == name), None)
+    if not field:
+        raise ValueError("Choose a custom column.")
+    supabase.table("inventory_custom_fields").delete().eq("id", field["id"]).execute()
+    return f"Removed '{name}' from the visible inventory columns. Existing saved values remain in the records."
+
+
+def save_inventory_table(data):
+    if data is None:
+        return "No table changes to save."
+    headers = inventory_headers()
+    fields = custom_fields_list()
+    if hasattr(data, "values"):
+        data = data.values.tolist()
+    updated = 0
+    for row in data:
+        if not row or row[0] in (None, ""):
+            continue
+        item_id = int(row[0])
+        custom_values = {}
+        for idx, field in enumerate(fields, start=7):
+            value = row[idx] if idx < len(row) else None
+            if value not in (None, ""):
+                custom_values[field["name"]] = value
+        expiry = row[6] if len(row) > 6 and row[6] not in ("", None) else None
+        if expiry:
+            expiry = str(expiry)[:10]
+            datetime.strptime(expiry, "%Y-%m-%d")
+        supabase.table("inventory_items").update({
+            "quantity": int(row[3] or 0),
+            "unit": str(row[4] or "pcs"),
+            "reorder_threshold": int(row[5] or 0),
+            "expiry_date": expiry,
+            "custom_values": custom_values,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", item_id).execute()
+        updated += 1
+    return f"Saved changes for {updated} inventory item(s)."
 
 
 def adjust_item(name, category, delta):
@@ -296,13 +405,19 @@ def chat_fn(message, history):
 
 
 def refresh_all():
+    items = inventory_records()
+    cats = categories_list()
     return (
         dashboard_summary(),
-        inventory_rows(),
-        inventory_rows(low_only=True),
-        [[c["id"], c["name"]] for c in categories_list()],
+        gr.update(value=inventory_rows(), headers=inventory_headers()),
+        gr.update(value=inventory_rows(low_only=True), headers=inventory_headers()),
+        [[c["id"], c["name"]] for c in cats],
         audit_rows(),
-        gr.update(choices=[c["name"] for c in categories_list()]),
+        gr.update(choices=[c["name"] for c in cats]),
+        gr.update(choices=[r["name"] for r in items]),
+        gr.update(choices=[c["name"] for c in cats]),
+        gr.update(choices=[f["name"] for f in custom_fields_list()]),
+        gr.update(choices=[f["name"] for f in custom_fields_list()]),
     )
 
 
@@ -320,6 +435,38 @@ def adjust_ui(name, category, delta):
         return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
     except Exception as exc:
         return f"Could not adjust stock: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
+
+
+def custom_field_ui(name, field_type):
+    try:
+        message = add_custom_field(name, field_type)
+        return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True)), gr.update(choices=[f["name"] for f in custom_fields_list()])
+    except Exception as exc:
+        return f"Could not add column: {exc}", gr.update(), gr.update(), gr.update()
+
+
+def move_field_ui(name, direction):
+    try:
+        message = move_custom_field(name, direction)
+        return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True))
+    except Exception as exc:
+        return f"Could not move column: {exc}", gr.update(), gr.update()
+
+
+def remove_field_ui(name):
+    try:
+        message = remove_custom_field(name)
+        return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True)), gr.update(choices=[f["name"] for f in custom_fields_list()])
+    except Exception as exc:
+        return f"Could not remove column: {exc}", gr.update(), gr.update(), gr.update()
+
+
+def save_table_ui(data):
+    try:
+        message = save_inventory_table(data)
+        return message, gr.update(value=inventory_rows()), gr.update(value=inventory_rows(True)), dashboard_summary(), audit_rows()
+    except Exception as exc:
+        return f"Could not save table: {exc}", gr.update(), gr.update(), dashboard_summary(), audit_rows()
 
 
 def add_category_ui(name):
@@ -378,7 +525,17 @@ def brand_header():
     """
 
 
-with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
+APP_CSS = """
+.gradio-container {max-width: 1400px !important; margin: auto !important; padding: 18px !important;}
+.tla-header {margin-bottom: 20px !important;}
+.gradio-container .tab-nav button {font-weight: 650 !important; padding: 12px 18px !important;}
+.gradio-container .block {border-radius: 14px !important;}
+.gradio-container input, .gradio-container textarea {border-radius: 10px !important;}
+.gradio-container button {border-radius: 10px !important; font-weight: 650 !important;}
+"""
+
+
+with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
     theme_styles = gr.HTML(theme_css("Neon Lounge"))
     gr.HTML(brand_header())
     with gr.Row():
@@ -387,7 +544,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
             value="Neon Lounge", label="Choose your theme", scale=1
         )
     theme_selector.change(fn=theme_css, inputs=theme_selector, outputs=theme_styles)
-    gr.Markdown("Manage stock, categories, reorder alerts, and stock history.")
+    gr.Markdown("### Your bar, your stock — all in one place")
+    gr.Markdown("Add products, track expiry dates, customize columns, and keep stock levels up to date.")
     with gr.Tabs():
         with gr.Tab("Dashboard"):
             summary = gr.Markdown()
@@ -401,7 +559,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
                 item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
-                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True)
+                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Choose an existing category or type a new one.")
             with gr.Row():
                 item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
                 item_unit = gr.Textbox(label="Unit", value="bottles")
@@ -411,16 +569,30 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
             save_status = gr.Markdown()
             gr.Markdown("#### Adjust existing stock (+/-)")
             with gr.Row():
-                adjust_name = gr.Textbox(label="Item name")
-                adjust_category = gr.Textbox(label="Exact category")
-                adjust_delta = gr.Number(label="Change (e.g. -2 or 10)", precision=0)
+                adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
+                adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
+                adjust_delta = gr.Number(label="Stock change (+/-)", precision=0)
             adjust_button = gr.Button("Adjust stock")
             adjust_status = gr.Markdown()
             gr.Markdown("#### All inventory")
+            gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.")
             inventory_table = gr.Dataframe(
-                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
-                interactive=False, wrap=True
+                headers=inventory_headers(), interactive=True, wrap=True
             )
+            save_table_button = gr.Button("Save table changes", variant="primary")
+            table_status = gr.Markdown()
+            gr.Markdown("#### Customize your columns")
+            gr.Markdown("Add fields such as Brand, Supplier, Bottle size, Storage location, Batch number, or Notes. Move or remove custom columns whenever you need.")
+            with gr.Row():
+                custom_field_name = gr.Textbox(label="New column name", placeholder="Supplier")
+                custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value="text")
+                add_field_button = gr.Button("Add column", variant="primary")
+            field_status = gr.Markdown()
+            with gr.Row():
+                manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()])
+                move_direction = gr.Radio(choices=["up", "down"], value="up", label="Move")
+                move_field_button = gr.Button("Move column")
+                remove_field_button = gr.Button("Remove column", variant="stop")
         with gr.Tab("Categories"):
             category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
             category_button = gr.Button("Add category", variant="primary")
@@ -440,7 +612,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
                 interactive=False, wrap=True
             )
 
-    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category]
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field, manage_field]
     demo.load(refresh_all, outputs=refresh_outputs)
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
@@ -451,6 +623,22 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
     adjust_button.click(
         adjust_ui, inputs=[adjust_name, adjust_category, adjust_delta],
         outputs=[adjust_status, summary, inventory_table, low_table, audit_table],
+    ).then(refresh_all, outputs=refresh_outputs)
+    save_table_button.click(
+        save_table_ui, inputs=[inventory_table],
+        outputs=[table_status, inventory_table, low_table, summary, audit_table],
+    )
+    add_field_button.click(
+        custom_field_ui, inputs=[custom_field_name, custom_field_type],
+        outputs=[field_status, inventory_table, low_table, manage_field],
+    )
+    move_field_button.click(
+        move_field_ui, inputs=[manage_field, move_direction],
+        outputs=[field_status, inventory_table, low_table],
+    )
+    remove_field_button.click(
+        remove_field_ui, inputs=[manage_field],
+        outputs=[field_status, inventory_table, low_table, manage_field],
     )
     category_button.click(
         add_category_ui, inputs=[category_name],
