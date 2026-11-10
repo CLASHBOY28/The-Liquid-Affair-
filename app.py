@@ -320,8 +320,62 @@ def add_category_ui(name):
         return f"Could not add category: {exc}", [[c["id"], c["name"]] for c in categories_list()], gr.update()
 
 
-with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
-    gr.Markdown("# THE LIQUID AFFAIR\n### Inventory & Bar Operations")
+def theme_css(theme):
+    palettes = {
+        "Neon Lounge": ("#090812", "#171326", "#f5c96a", "#d94dff", "#f5f0ff", "#27d9d0"),
+        "Tropical Luxe": ("#071b19", "#12352e", "#e8c77b", "#43c7a5", "#f2f7e9", "#b7dc75"),
+        "Classic Gold": ("#11100e", "#242019", "#d8b66a", "#a98a52", "#f5f0e6", "#c9a96e"),
+    }
+    bg, panel, gold, accent, ink, glow = palettes.get(theme, palettes["Neon Lounge"])
+    return f"""
+    <style>
+      :root {{ --tla-bg:{bg}; --tla-panel:{panel}; --tla-gold:{gold}; --tla-accent:{accent}; --tla-ink:{ink}; --tla-glow:{glow}; }}
+      body, .gradio-container {{ background:var(--tla-bg)!important; color:var(--tla-ink)!important; }}
+      .gradio-container .block, .gradio-container .tabitem, .gradio-container .panel {{ background:var(--tla-panel)!important; border-color:color-mix(in srgb,var(--tla-gold) 45%,transparent)!important; }}
+      .gradio-container h1, .gradio-container h2, .gradio-container h3 {{ color:var(--tla-gold)!important; }}
+      .gradio-container button.primary {{ background:var(--tla-accent)!important; border-color:var(--tla-gold)!important; }}
+      .tla-header {{ display:flex; align-items:center; justify-content:center; gap:22px; padding:22px 12px; margin-bottom:12px; border:1px solid color-mix(in srgb,var(--tla-gold) 55%,transparent); border-radius:18px; background:radial-gradient(ellipse at center,color-mix(in srgb,var(--tla-accent) 17%,var(--tla-panel)),var(--tla-bg)); box-shadow:0 0 28px color-mix(in srgb,var(--tla-glow) 18%,transparent); }}
+      .tla-logo {{ width:132px; height:132px; flex:none; filter:drop-shadow(0 0 8px var(--tla-accent)); }}
+      .tla-brand {{ text-align:left; }}
+      .tla-brand h1 {{ margin:0; font-size:clamp(27px,5vw,43px); letter-spacing:2px; color:var(--tla-gold); }}
+      .tla-brand p {{ margin:8px 0 0; letter-spacing:4px; font-size:12px; color:var(--tla-ink); opacity:.85; }}
+      @media(max-width:520px) {{ .tla-header {{ gap:10px; padding:14px 8px; }} .tla-logo {{ width:94px;height:94px; }} .tla-brand p {{letter-spacing:2px;font-size:10px;}} }}
+    </style>
+    """
+
+
+def brand_header():
+    return """
+    <div class="tla-header">
+      <svg class="tla-logo" viewBox="0 0 200 200" role="img" aria-label="The Liquid Affair neon cocktail logo">
+        <defs>
+          <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ed4bd8"/><stop offset=".48" stop-color="#ffbd58"/><stop offset="1" stop-color="#35d8dc"/></linearGradient>
+          <linearGradient id="liquid" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e85cff"/><stop offset="1" stop-color="#ffbd58"/></linearGradient>
+          <filter id="glow"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <circle cx="100" cy="100" r="91" fill="#090812" stroke="url(#ring)" stroke-width="4" filter="url(#glow)"/>
+        <text x="39" y="58" fill="#ffd47b" font-size="17" font-family="cursive" font-style="italic">The</text>
+        <text x="20" y="99" fill="#e96aff" font-size="35" font-family="cursive" font-style="italic" filter="url(#glow)">Liquid</text>
+        <text x="23" y="135" fill="#ffd06b" font-size="34" font-family="cursive" font-style="italic" filter="url(#glow)">Affair</text>
+        <path d="M133 45 L177 45 L156 83 L156 119 M142 119 H170 M155 84 L173 55" fill="none" stroke="#43dce0" stroke-width="3" stroke-linecap="round"/>
+        <path d="M137 55 Q156 75 174 55 L166 72 Q156 84 146 72Z" fill="url(#liquid)" opacity=".9"/>
+        <path d="M151 43 Q171 25 178 43" fill="none" stroke="#ffcf68" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="178" cy="40" r="5" fill="#ed58d5"/>
+      </svg>
+      <div class="tla-brand"><h1>THE LIQUID AFFAIR</h1><p>PREMIUM BARTENDING SERVICES</p></div>
+    </div>
+    """
+
+
+with gr.Blocks(title="The Liquid Affair | Inventory", css="") as demo:
+    theme_styles = gr.HTML(theme_css("Neon Lounge"))
+    gr.HTML(brand_header())
+    with gr.Row():
+        theme_selector = gr.Dropdown(
+            choices=["Neon Lounge", "Tropical Luxe", "Classic Gold"],
+            value="Neon Lounge", label="Choose your theme", scale=1
+        )
+    theme_selector.change(fn=theme_css, inputs=theme_selector, outputs=theme_styles)
     gr.Markdown("Manage stock, categories, reorder alerts, and stock history.")
     with gr.Tabs():
         with gr.Tab("Dashboard"):
