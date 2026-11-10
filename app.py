@@ -515,6 +515,9 @@ APP_CSS = """
 .gradio-container .block {border-radius: 14px !important;}
 .gradio-container input, .gradio-container textarea {border-radius: 10px !important;}
 .gradio-container button {border-radius: 10px !important; font-weight: 650 !important;}
+/* Keep inventory headings readable on phones; allow sideways scrolling for wide tables. */
+.gradio-container .table-wrap, .gradio-container .table-container, .gradio-container .dataframe-container {overflow-x:auto !important;}
+.gradio-container .dataframe-container table th, .gradio-container .dataframe-container table td {white-space:nowrap !important; min-width:76px;}
 """
 
 
@@ -536,7 +539,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### Low-stock items")
             low_table = gr.Dataframe(
                 headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
-                interactive=False, wrap=True
+                interactive=False, wrap=False
             )
         with gr.Tab("Inventory"):
             gr.Markdown("#### Add item or set its exact stock")
@@ -560,7 +563,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### All inventory")
             gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.")
             inventory_table = gr.Dataframe(
-                headers=inventory_headers(), interactive=True, wrap=True
+                headers=inventory_headers(), interactive=True, wrap=False
             )
             save_table_button = gr.Button("Save table changes", variant="primary")
             table_status = gr.Markdown()
