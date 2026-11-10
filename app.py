@@ -230,7 +230,7 @@ def chat_fn(message, history):
     messages.append({"role": "user", "content": message})
     response = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
-        tool_choice="auto", parallel_tool_calls=False, temperature=0.1,
+        tool_choice="auto", parallel_tool_calls=False,
     )
     assistant_message = response.choices[0].message
     if not assistant_message.tool_calls:
@@ -245,8 +245,7 @@ def chat_fn(message, history):
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
     follow_up = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
-        tool_choice="auto", temperature=0.1,
-        extra_body={"thinking": {"type": "disabled"}},
+        tool_choice="auto",
     )
     return follow_up.choices[0].message.content or "The tool operation finished."
 
