@@ -12,15 +12,15 @@ load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
+ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
@@ -228,7 +228,7 @@ def chat_fn(message, history):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": message})
-    response = openai_client.chat.completions.create(
+    response = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", parallel_tool_calls=False, temperature=0.1,
     )
