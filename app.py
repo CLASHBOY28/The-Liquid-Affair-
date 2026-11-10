@@ -114,22 +114,6 @@ def inventory_rows(low_only: bool = False):
     return rows
 
 
-def inventory_rows(low_only: bool = False):
-    records = inventory_records()
-    if low_only:
-        records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
-    rows = []
-    for item in records:
-        category = item.get("categories") or {}
-        rows.append([
-            item["id"], item["name"], category.get("name", "Uncategorised"),
-            item["quantity"], item.get("unit") or "pcs",
-            item["reorder_threshold"], item.get("expiry_date") or "",
-            item.get("updated_at", "")
-        ])
-    return rows
-
-
 def audit_rows():
     result = (supabase.table("inventory_audit")
               .select("created_at, item_name, action, old_quantity, new_quantity, note")
