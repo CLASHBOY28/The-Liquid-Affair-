@@ -15,7 +15,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
 
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
@@ -231,6 +231,7 @@ def chat_fn(message, history):
     response = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", parallel_tool_calls=False, temperature=0.1,
+        extra_body={"thinking": {"type": "disabled"}},
     )
     assistant_message = response.choices[0].message
     if not assistant_message.tool_calls:
@@ -246,6 +247,7 @@ def chat_fn(message, history):
     follow_up = openai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", temperature=0.1,
+        extra_body={"thinking": {"type": "disabled"}},
     )
     return follow_up.choices[0].message.content or "The tool operation finished."
 
