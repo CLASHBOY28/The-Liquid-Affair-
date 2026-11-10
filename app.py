@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
@@ -62,15 +63,14 @@ def gemini_chat_completion(**kwargs):
 
 
 def ai_chat_completion(**kwargs):
-    """Prefer Cloudflare Workers AI when configured; fall back to Gemini on any provider error."""
+    """Prefer Cloudflare Workers AI when configured; log failures before falling back to Gemini."""
     if cloudflare_client is not None:
         try:
             request = dict(kwargs)
             request["model"] = CLOUDFLARE_MODEL
             return cloudflare_client.chat.completions.create(**request)
-        except Exception:
-            # Gemini remains available if Cloudflare is unavailable, rate-limited, or misconfigured.
-            pass
+        except Exception as exc:
+            logging.exception("Cloudflare Workers AI request failed; falling back to Gemini: %s", exc)
     gemini_request = dict(kwargs)
     gemini_request["model"] = MODEL
     return gemini_chat_completion(**gemini_request)
@@ -377,6 +377,69 @@ Report tool errors honestly. Do not claim an operation succeeded if its tool ret
 
 
 def chat_fn(message, history):
+    user_text = (message or "").strip()
+    normalized = user_text.lower()
+
+    # Explicit provider diagnostic: tests Cloudflare directly and never silently falls back.
+    if normalized in ("test cloudflare", "check cloudflare", "use cloudflare", "test cloudflare ai"):
+        if cloudflare_client is None:
+            return "Cloudflare is not configured. Check CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in Railway."
+        try:
+            result = cloudflare_client.chat.completions.create(
+                model=CLOUDFLARE_MODEL,
+                messages=[{"role": "user", "content": "Reply with exactly: Cloudflare AI is connected."}],
+                max_tokens=40,
+            )
+            return "Cloudflare test successful: " + (result.choices[0].message.content or "The model responded.")
+        except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            detail = str(exc).replace(CLOUDFLARE_API_TOKEN, "[redacted]")
+            logging.exception("Cloudflare direct test failed: %s", detail)
+            return "Cloudflare test failed" + (f" (HTTP {status})" if status else "") + ": " + detail[:700]
+
+    # Deterministic inventory lookup: basic stock queries should not depend on an LLM tool call.
+    if any(term in normalized for term in ("low stock", "low-stock", "below reorder", "reorder alerts")):
+        try:
+            records = [r for r in inventory_records() if r["quantity"] <= r["reorder_threshold"]]
+            if not records:
+                return "No low-stock items found. All recorded items are above their reorder thresholds."
+            lines = ["### Low-stock items", "", "| Item | Category | Quantity | Unit | Reorder at |", "|---|---|---:|---|---:|"]
+            for item in records:
+                category = item.get("categories") or {}
+                category_name = category.get("name", "Uncategorised") if isinstance(category, dict) else "Uncategorised"
+                lines.append(f"| {item['name']} | {category_name} | {item['quantity']} | {item.get('unit') or 'pcs'} | {item['reorder_threshold']} |")
+            return "\\n".join(lines)
+        except Exception as exc:
+            logging.exception("Direct low-stock lookup failed: %s", exc)
+            return "I couldn't read the inventory from Supabase. Please check the database connection and try again."
+
+    # Follow-up category filter, e.g. the user replies "Juice" after asking for low stock.
+    prior_text = " ".join(
+        str(turn.get("content", "")) if isinstance(turn, dict)
+        else " ".join(str(part) for part in turn if part)
+        for turn in (history or [])
+    ).lower()
+    if normalized and len(normalized) <= 40 and "low stock" in prior_text:
+        try:
+            records = [r for r in inventory_records() if r["quantity"] <= r["reorder_threshold"]]
+            filtered = []
+            for item in records:
+                category = item.get("categories") or {}
+                category_name = category.get("name", "") if isinstance(category, dict) else ""
+                if normalized in item["name"].lower() or normalized in category_name.lower():
+                    filtered.append(item)
+            if not filtered:
+                return f"No low-stock items matched '{user_text}'."
+            lines = [f"### Low-stock items matching {user_text}", "", "| Item | Category | Quantity | Unit | Reorder at |", "|---|---|---:|---|---:|"]
+            for item in filtered:
+                category = item.get("categories") or {}
+                category_name = category.get("name", "Uncategorised") if isinstance(category, dict) else "Uncategorised"
+                lines.append(f"| {item['name']} | {category_name} | {item['quantity']} | {item.get('unit') or 'pcs'} | {item['reorder_threshold']} |")
+            return "\\n".join(lines)
+        except Exception as exc:
+            logging.exception("Low-stock category filter failed: %s", exc)
+            return "I couldn't filter the inventory just now. Please try again."
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": message})
@@ -400,16 +463,10 @@ def chat_fn(message, history):
         except Exception as exc:
             result = f"ERROR: {type(exc).__name__}: {exc}"
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    try:
-        follow_up = ai_chat_completion(
-            model=CLOUDFLARE_MODEL, messages=messages, tools=TOOLS,
-            tool_choice="auto",
-        )
-        return follow_up.choices[0].message.content or "The tool operation finished."
-    except APIStatusError as exc:
-        if exc.status_code in (429, 500, 502, 503, 504):
-            return "The inventory action ran, but Gemini is temporarily unavailable (HTTP " + str(exc.status_code) + "). Please ask me to check the result before repeating the action."
-        return "Gemini follow-up failed (HTTP " + str(exc.status_code) + "). Please check the inventory before repeating the action."
+    # Return tool results directly. A second model round-trip is unnecessary and
+    # was causing Gemini HTTP 400 errors with the tool-result message format.
+    results = [str(message.get("content", "")) for message in messages if message.get("role") == "tool"]
+    return "\\n".join(result for result in results if result) or "The inventory action finished."
 
 
 def refresh_all():
