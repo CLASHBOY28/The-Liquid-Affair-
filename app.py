@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import gradio as gr
@@ -7,21 +8,153 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from supabase import Client, create_client
 
-load_dotenv()  # Loads a local .env during development; hosting secrets take precedence.
+load_dotenv()
 
-# Configure these as server-side environment variables. Never expose the
-# Supabase service-role key or OpenAI key in browser JavaScript.
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+APP_USERNAME = os.environ.get("APP_USERNAME", "")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+if not APP_USERNAME or not APP_PASSWORD:
+    raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+
+def category_id_for(name: str, create: bool = False):
+    name = name.strip().lower()
+    if not name:
+        raise ValueError("Enter a category name.")
+    result = supabase.table("categories").select("id").eq("name", name).limit(1).execute()
+    if result.data:
+        return result.data[0]["id"]
+    if not create:
+        return None
+    inserted = supabase.table("categories").insert({"name": name}).execute()
+    if not inserted.data:
+        raise RuntimeError("Could not create category.")
+    return inserted.data[0]["id"]
+
+
+def categories_list():
+    result = supabase.table("categories").select("id, name").order("name").execute()
+    return result.data or []
+
+
+def inventory_records():
+    result = (supabase.table("inventory_items")
+              .select("id, name, quantity, unit, reorder_threshold, updated_at, categories(name)")
+              .order("name").execute())
+    return result.data or []
+
+
+def inventory_rows(low_only: bool = False):
+    records = inventory_records()
+    if low_only:
+        records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
+    rows = []
+    for item in records:
+        category = item.get("categories") or {}
+        rows.append([
+            item["id"], item["name"], category.get("name", "Uncategorised"),
+            item["quantity"], item.get("unit") or "pcs",
+            item["reorder_threshold"], item.get("updated_at", "")
+        ])
+    return rows
+
+
+def audit_rows():
+    result = (supabase.table("inventory_audit")
+              .select("created_at, item_name, action, old_quantity, new_quantity, note")
+              .order("created_at", desc=True).limit(200).execute())
+    return [[r.get("created_at", ""), r.get("item_name", ""), r.get("action", ""),
+             r.get("old_quantity"), r.get("new_quantity"), r.get("note", "")]
+            for r in (result.data or [])]
+
+
+def write_audit(item_name, action, old_qty=None, new_qty=None, note=None):
+    supabase.table("inventory_audit").insert({
+        "item_name": item_name, "action": action,
+        "old_quantity": old_qty, "new_quantity": new_qty, "note": note,
+    }).execute()
+
+
+def save_item(name, category, quantity, threshold, unit):
+    name = (name or "").strip()
+    category = (category or "").strip()
+    unit = (unit or "pcs").strip() or "pcs"
+    if not name or not category:
+        raise ValueError("Enter an item name and choose a category.")
+    if quantity is None or int(quantity) < 0 or threshold is None or int(threshold) < 0:
+        raise ValueError("Quantity and reorder threshold must be zero or greater.")
+    quantity, threshold = int(quantity), int(threshold)
+    cat_id = category_id_for(category, create=True)
+    found = (supabase.table("inventory_items").select("id, quantity")
+             .eq("name", name).eq("category_id", cat_id).limit(1).execute())
+    if found.data:
+        old = found.data[0]["quantity"]
+        (supabase.table("inventory_items").update({
+            "quantity": quantity, "reorder_threshold": threshold,
+            "unit": unit, "updated_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", found.data[0]["id"]).execute())
+        write_audit(name, "set_quantity", old, quantity, "Dashboard")
+        return f"Updated {name}: {old} → {quantity} {unit}."
+    (supabase.table("inventory_items").insert({
+        "name": name, "category_id": cat_id, "quantity": quantity,
+        "reorder_threshold": threshold, "unit": unit
+    }).execute())
+    write_audit(name, "create", None, quantity, "Dashboard")
+    return f"Added {name}: {quantity} {unit}."
+
+
+def adjust_item(name, category, delta):
+    name, category = (name or "").strip(), (category or "").strip()
+    if not name or not category or delta is None:
+        raise ValueError("Enter the item, category, and stock change.")
+    cat_id = category_id_for(category, create=False)
+    if cat_id is None:
+        raise ValueError(f"Category '{category}' does not exist.")
+    found = (supabase.table("inventory_items").select("id, quantity")
+             .eq("name", name).eq("category_id", cat_id).limit(1).execute())
+    if not found.data:
+        raise ValueError(f"{name} was not found in {category}.")
+    old = found.data[0]["quantity"]
+    new = old + int(delta)
+    if new < 0:
+        raise ValueError(f"Not enough stock. Current quantity is {old}.")
+    (supabase.table("inventory_items").update({
+        "quantity": new, "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", found.data[0]["id"]).execute())
+    write_audit(name, "adjust", old, new, f"delta={int(delta)}")
+    return f"{name}: {old} → {new}."
+
+
+def add_category(name):
+    category_id_for(name, create=True)
+    return f"Category '{name.strip().lower()}' is ready."
+
+
+def dashboard_summary():
+    records = inventory_records()
+    low = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
+    units = len(records)
+    total = sum(r["quantity"] for r in records)
+    return (
+        f"### Inventory overview\n"
+        f"- **Items:** {units}\n"
+        f"- **Total units (mixed units):** {total}\n"
+        f"- **Low-stock alerts:** {len(low)}\n"
+        f"- **Categories:** {len(categories_list())}\n\n"
+        f"Low-stock count includes items at or below their reorder threshold."
+    )
+
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_or_update_item",
-     "description": "Add an inventory item or set its exact quantity. Creates its category if needed.",
+     "description": "Add an inventory item or set its exact quantity. Creates the category if needed.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string"},
          "quantity": {"type": "integer", "minimum": 0},
@@ -35,124 +168,36 @@ TOOLS = [
          "delta": {"type": "integer"}},
          "required": ["name", "category", "delta"]}}},
     {"type": "function", "function": {"name": "list_inventory",
-     "description": "List all inventory items and their categories.",
-     "parameters": {"type": "object", "properties": {}}}},
+     "description": "List all inventory items.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "low_stock",
-     "description": "List items at or below their reorder threshold.",
-     "parameters": {"type": "object", "properties": {}}}},
+     "description": "List items at or below their reorder threshold.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "add_category",
-     "description": "Create an inventory category.",
-     "parameters": {"type": "object", "properties": {"name": {"type": "string"}},
-                    "required": ["name"]}}},
+     "description": "Create an inventory category.", "parameters": {
+         "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "list_categories",
-     "description": "List all inventory categories.",
-     "parameters": {"type": "object", "properties": {}}}},
+     "description": "List all inventory categories.", "parameters": {"type": "object", "properties": {}}}},
 ]
-
-
-def get_or_create_category(category_name: str) -> int:
-    name = category_name.strip().lower()
-    if not name:
-        raise ValueError("Category name cannot be empty.")
-    result = supabase.table("categories").select("id").eq("name", name).limit(1).execute()
-    if result.data:
-        return result.data[0]["id"]
-    inserted = supabase.table("categories").insert({"name": name}).execute()
-    if not inserted.data:
-        raise RuntimeError("Category could not be created.")
-    return inserted.data[0]["id"]
-
-
-def find_item(name: str, category: str):
-    # A lookup must not create a category as a side effect.
-    category_name = category.strip().lower()
-    cat = (supabase.table("categories").select("id")
-           .eq("name", category_name).limit(1).execute())
-    if not cat.data:
-        return None
-    result = (supabase.table("inventory_items")
-              .select("id, quantity, name, category_id")
-              .eq("name", name.strip())
-              .eq("category_id", cat.data[0]["id"]).limit(1).execute())
-    return result.data[0] if result.data else None
-
-
-def write_audit(item_name, action, old_qty=None, new_qty=None, note=None):
-    # Audit failures are surfaced in server logs rather than hiding them.
-    supabase.table("inventory_audit").insert({
-        "item_name": item_name, "action": action,
-        "old_quantity": old_qty, "new_quantity": new_qty, "note": note,
-    }).execute()
 
 
 def execute_tool(name: str, args: dict[str, Any]) -> str:
     try:
         if name == "add_or_update_item":
-            item_name = str(args["name"]).strip()
-            category = str(args["category"]).strip()
-            quantity = int(args["quantity"])
-            threshold = int(args.get("reorder_threshold", 5))
-            unit = str(args.get("unit", "pcs")).strip() or "pcs"
-            if not item_name or not category or quantity < 0 or threshold < 0:
-                return "ERROR: Enter a name, category, and non-negative quantities."
-            cat_id = get_or_create_category(category)
-            existing = find_item(item_name, category)
-            if existing:
-                old_qty = existing["quantity"]
-                (supabase.table("inventory_items").update({
-                    "quantity": quantity, "reorder_threshold": threshold, "unit": unit
-                }).eq("id", existing["id"]).execute())
-                write_audit(item_name, "set_quantity", old_qty, quantity, f"category={category}")
-                return f"Updated {item_name}: {old_qty} -> {quantity} {unit}."
-            supabase.table("inventory_items").insert({
-                "name": item_name, "category_id": cat_id, "quantity": quantity,
-                "reorder_threshold": threshold, "unit": unit,
-            }).execute()
-            write_audit(item_name, "create", None, quantity, f"category={category}")
-            return f"Added {item_name} to {category}: {quantity} {unit}."
-
+            return save_item(args["name"], args["category"], args["quantity"],
+                             args.get("reorder_threshold", 5), args.get("unit", "pcs"))
         if name == "adjust_stock":
-            item_name = str(args["name"]).strip()
-            category = str(args["category"]).strip()
-            delta = int(args["delta"])
-            existing = find_item(item_name, category)
-            if not existing:
-                return f"{item_name} was not found in {category}. Add it first."
-            old_qty = existing["quantity"]
-            new_qty = old_qty + delta
-            if new_qty < 0:
-                return f"Cannot reduce {item_name} below zero. Current stock: {old_qty}."
-            (supabase.table("inventory_items").update({"quantity": new_qty})
-             .eq("id", existing["id"]).execute())
-            write_audit(item_name, "adjust", old_qty, new_qty, f"delta={delta}")
-            return f"{item_name}: {old_qty} -> {new_qty}."
-
+            return adjust_item(args["name"], args["category"], args["delta"])
         if name == "list_inventory":
-            result = (supabase.table("inventory_items")
-                      .select("name, quantity, unit, reorder_threshold, categories(name)")
-                      .order("name").execute())
-            return json.dumps(result.data, default=str)
-
+            return json.dumps(inventory_records(), default=str)
         if name == "low_stock":
-            result = (supabase.table("inventory_items")
-                      .select("name, quantity, unit, reorder_threshold, categories(name)")
-                      .execute())
-            low = [row for row in result.data
-                   if row["quantity"] <= row["reorder_threshold"]]
-            return json.dumps(low, default=str)
-
+            return json.dumps([r for r in inventory_records()
+                               if r["quantity"] <= r["reorder_threshold"]], default=str)
         if name == "add_category":
-            category_id = get_or_create_category(str(args["name"]))
-            return f"Category created or already exists (id={category_id})."
-
+            return add_category(args["name"])
         if name == "list_categories":
-            result = supabase.table("categories").select("id, name").order("name").execute()
-            return json.dumps(result.data, default=str)
-
-        return f"Unknown tool: {name}"
+            return json.dumps(categories_list(), default=str)
+        return "Unknown inventory action."
     except Exception as exc:
-        print(f"Inventory tool error ({name}): {type(exc).__name__}: {exc}")
-        return f"ERROR: The inventory operation failed ({type(exc).__name__}). Check server logs."
+        return f"ERROR: {type(exc).__name__}: {exc}"
 
 
 def history_to_messages(history):
@@ -172,11 +217,10 @@ def history_to_messages(history):
 
 SYSTEM_PROMPT = """
 You are the inventory assistant for The Liquid Affair, a mobile bar business.
-You can add or set stock, adjust stock, list inventory, show low stock, and manage categories.
-Always use the provided tools for inventory data and changes. Never invent stock values.
-A request to add stock means add_or_update_item sets the exact quantity; a request to
-increase/decrease stock means adjust_stock. Ask one short question if an item or category
-is ambiguous. Be concise and clearly report the result returned by the tool.
+Use the supplied tools for every inventory lookup or change. Never invent stock values.
+'Add/set stock to N' means set the exact quantity. 'Increase/decrease by N' means adjust
+the current quantity. Ask one concise question when the item or category is ambiguous.
+Report tool errors honestly. Do not claim an operation succeeded if its tool returned ERROR.
 """
 
 
@@ -190,40 +234,133 @@ def chat_fn(message, history):
     )
     assistant_message = response.choices[0].message
     if not assistant_message.tool_calls:
-        return assistant_message.content or "I couldn't produce a response."
-
+        return assistant_message.content or "I couldn't generate a response."
     messages.append(assistant_message)
     for call in assistant_message.tool_calls:
         try:
-            arguments = json.loads(call.function.arguments or "{}")
-            result = execute_tool(call.function.name, arguments)
-        except (ValueError, TypeError, json.JSONDecodeError):
-            result = "ERROR: The requested operation had invalid arguments."
+            args = json.loads(call.function.arguments or "{}")
+            result = execute_tool(call.function.name, args)
+        except Exception as exc:
+            result = f"ERROR: {type(exc).__name__}: {exc}"
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-
     follow_up = openai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", temperature=0.1,
     )
-    return follow_up.choices[0].message.content or "The operation finished."
+    return follow_up.choices[0].message.content or "The tool operation finished."
 
 
-demo = gr.ChatInterface(
-    fn=chat_fn,
-    title="The Liquid Affair | Inventory Assistant",
-    description="Manage bar stock, categories, and low-stock alerts using natural language.",
-    examples=[
-        "Add 24 bottles of Mango Juice under Juices",
-        "Reduce Straws by 5 in the Straws category",
-        "Show low stock",
-        "Add category Syrups",
-        "List inventory",
-    ],
-)
+def refresh_all():
+    return (
+        dashboard_summary(),
+        inventory_rows(),
+        inventory_rows(low_only=True),
+        [[c["id"], c["name"]] for c in categories_list()],
+        audit_rows(),
+        gr.update(choices=[c["name"] for c in categories_list()]),
+    )
+
+
+def add_item_ui(name, category, quantity, threshold, unit):
+    try:
+        message = save_item(name, category, quantity, threshold, unit)
+        return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
+    except Exception as exc:
+        return f"Could not save item: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
+
+
+def adjust_ui(name, category, delta):
+    try:
+        message = adjust_item(name, category, delta)
+        return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
+    except Exception as exc:
+        return f"Could not adjust stock: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
+
+
+def add_category_ui(name):
+    try:
+        message = add_category(name)
+        cats = categories_list()
+        return message, [[c["id"], c["name"]] for c in cats], gr.update(choices=[c["name"] for c in cats])
+    except Exception as exc:
+        return f"Could not add category: {exc}", [[c["id"], c["name"]] for c in categories_list()], gr.update()
+
+
+with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
+    gr.Markdown("# THE LIQUID AFFAIR\n### Inventory & Bar Operations")
+    gr.Markdown("Manage stock, categories, reorder alerts, and stock history.")
+    with gr.Tabs():
+        with gr.Tab("Dashboard"):
+            summary = gr.Markdown()
+            refresh_button = gr.Button("Refresh dashboard")
+            gr.Markdown("#### Low-stock items")
+            low_table = gr.Dataframe(
+                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Updated"],
+                interactive=False, wrap=True
+            )
+        with gr.Tab("Inventory"):
+            gr.Markdown("#### Add item or set its exact stock")
+            with gr.Row():
+                item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
+                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True)
+            with gr.Row():
+                item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
+                item_unit = gr.Textbox(label="Unit", value="bottles")
+                item_threshold = gr.Number(label="Reorder threshold", value=5, precision=0)
+            save_button = gr.Button("Save item", variant="primary")
+            save_status = gr.Markdown()
+            gr.Markdown("#### Adjust existing stock (+/-)")
+            with gr.Row():
+                adjust_name = gr.Textbox(label="Item name")
+                adjust_category = gr.Textbox(label="Exact category")
+                adjust_delta = gr.Number(label="Change (e.g. -2 or 10)", precision=0)
+            adjust_button = gr.Button("Adjust stock")
+            adjust_status = gr.Markdown()
+            gr.Markdown("#### All inventory")
+            inventory_table = gr.Dataframe(
+                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Updated"],
+                interactive=False, wrap=True
+            )
+        with gr.Tab("Categories"):
+            category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
+            category_button = gr.Button("Add category", variant="primary")
+            category_status = gr.Markdown()
+            category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False)
+        with gr.Tab("AI assistant"):
+            gr.ChatInterface(
+                fn=chat_fn,
+                title="Ask The Liquid Affair",
+                description="Try: 'Add 24 bottles of Mango Juice under Juices' or 'Show low stock'.",
+                examples=["Show low stock", "List inventory", "Add category Syrups",
+                          "Reduce Straws by 5 in Straws"],
+            )
+        with gr.Tab("Stock history"):
+            audit_table = gr.Dataframe(
+                headers=["Date", "Item", "Action", "Old quantity", "New quantity", "Note"],
+                interactive=False, wrap=True
+            )
+
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category]
+    demo.load(refresh_all, outputs=refresh_outputs)
+    refresh_button.click(refresh_all, outputs=refresh_outputs)
+    save_button.click(
+        add_item_ui,
+        inputs=[item_name, item_category, item_quantity, item_threshold, item_unit],
+        outputs=[save_status, summary, inventory_table, low_table, audit_table],
+    )
+    adjust_button.click(
+        adjust_ui, inputs=[adjust_name, adjust_category, adjust_delta],
+        outputs=[adjust_status, summary, inventory_table, low_table, audit_table],
+    )
+    category_button.click(
+        add_category_ui, inputs=[category_name],
+        outputs=[category_status, category_table, item_category],
+    )
 
 
 if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
         server_port=int(os.getenv("PORT", "7860")),
+        auth=(APP_USERNAME, APP_PASSWORD),
     )
