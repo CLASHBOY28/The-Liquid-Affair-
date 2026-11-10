@@ -17,11 +17,20 @@ GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+CLOUDFLARE_MODEL = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
 
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
-ai_client = OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+gemini_client = OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+cloudflare_client = None
+if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
+    cloudflare_client = OpenAI(
+        api_key=CLOUDFLARE_API_TOKEN,
+        base_url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1/",
+    )
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
@@ -41,7 +50,7 @@ def gemini_chat_completion(**kwargs):
             try:
                 request = dict(kwargs)
                 request["model"] = model
-                return ai_client.chat.completions.create(**request)
+                return gemini_client.chat.completions.create(**request)
             except APIStatusError as exc:
                 last_error = exc
                 if exc.status_code == 429:
@@ -50,6 +59,21 @@ def gemini_chat_completion(**kwargs):
                     break
                 time.sleep(1)
     raise last_error
+
+
+def ai_chat_completion(**kwargs):
+    """Prefer Cloudflare Workers AI when configured; fall back to Gemini on any provider error."""
+    if cloudflare_client is not None:
+        try:
+            request = dict(kwargs)
+            request["model"] = CLOUDFLARE_MODEL
+            return cloudflare_client.chat.completions.create(**request)
+        except Exception:
+            # Gemini remains available if Cloudflare is unavailable, rate-limited, or misconfigured.
+            pass
+    gemini_request = dict(kwargs)
+    gemini_request["model"] = MODEL
+    return gemini_chat_completion(**gemini_request)
 
 
 def category_id_for(name: str, create: bool = False):
