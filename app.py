@@ -12,15 +12,15 @@ load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
-MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
-ai_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+ai_client = OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
@@ -231,7 +231,6 @@ def chat_fn(message, history):
     response = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", parallel_tool_calls=False, temperature=0.1,
-        extra_body={"thinking": {"type": "disabled"}},
     )
     assistant_message = response.choices[0].message
     if not assistant_message.tool_calls:
@@ -244,7 +243,7 @@ def chat_fn(message, history):
         except Exception as exc:
             result = f"ERROR: {type(exc).__name__}: {exc}"
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    follow_up = openai_client.chat.completions.create(
+    follow_up = ai_client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOLS,
         tool_choice="auto", temperature=0.1,
         extra_body={"thinking": {"type": "disabled"}},
