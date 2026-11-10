@@ -1,0 +1,4 @@
+gradio
+openai
+supabase
+python-dotenv
