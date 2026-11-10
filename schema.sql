@@ -12,6 +12,7 @@ create table if not exists inventory_items (
   quantity integer not null default 0 check (quantity >= 0),
   reorder_threshold integer not null default 5 check (reorder_threshold >= 0),
   unit text not null default 'pcs',
+  expiry_date date,
   updated_at timestamptz not null default now(),
   unique (name, category_id)
 );
