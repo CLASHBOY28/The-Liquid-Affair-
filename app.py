@@ -26,14 +26,26 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
 def gemini_chat_completion(**kwargs):
-    """Retry transient Gemini availability and rate-limit errors."""
-    for attempt in range(3):
-        try:
-            return ai_client.chat.completions.create(**kwargs)
-        except APIStatusError as exc:
-            if exc.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
-                raise
-            time.sleep(2 ** attempt)
+    """Retry transient Gemini errors, then fall back to another supported model."""
+    requested_model = kwargs.get("model", MODEL)
+    models = [requested_model]
+    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
+    if fallback_model and fallback_model != requested_model:
+        models.append(fallback_model)
+
+    last_error = None
+    for model in models:
+        for attempt in range(3):
+            try:
+                request = dict(kwargs)
+                request["model"] = model
+                return ai_client.chat.completions.create(**request)
+            except APIStatusError as exc:
+                last_error = exc
+                if exc.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+                    break
+                time.sleep(2 ** attempt)
+    raise last_error
 
 
 def category_id_for(name: str, create: bool = False):
