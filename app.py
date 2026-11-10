@@ -1,11 +1,12 @@
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 import gradio as gr
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIStatusError, OpenAI
 from supabase import Client, create_client
 
 load_dotenv()
@@ -22,6 +23,17 @@ if not APP_USERNAME or not APP_PASSWORD:
 
 ai_client = OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+
+def gemini_chat_completion(**kwargs):
+    """Retry transient Gemini availability and rate-limit errors."""
+    for attempt in range(3):
+        try:
+            return ai_client.chat.completions.create(**kwargs)
+        except APIStatusError as exc:
+            if exc.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def category_id_for(name: str, create: bool = False):
@@ -228,10 +240,15 @@ def chat_fn(message, history):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": message})
-    response = ai_client.chat.completions.create(
-        model=MODEL, messages=messages, tools=TOOLS,
-        tool_choice="auto", parallel_tool_calls=False,
-    )
+    try:
+        response = gemini_chat_completion(
+            model=MODEL, messages=messages, tools=TOOLS,
+            tool_choice="auto", parallel_tool_calls=False,
+        )
+    except APIStatusError as exc:
+        if exc.status_code in (429, 500, 502, 503, 504):
+            return "Gemini is temporarily unavailable (HTTP " + str(exc.status_code) + "). Please try again in a minute."
+        return "Gemini API request failed (HTTP " + str(exc.status_code) + "). Please contact the app administrator."
     assistant_message = response.choices[0].message
     if not assistant_message.tool_calls:
         return assistant_message.content or "I couldn't generate a response."
@@ -243,11 +260,16 @@ def chat_fn(message, history):
         except Exception as exc:
             result = f"ERROR: {type(exc).__name__}: {exc}"
         messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    follow_up = ai_client.chat.completions.create(
-        model=MODEL, messages=messages, tools=TOOLS,
-        tool_choice="auto",
-    )
-    return follow_up.choices[0].message.content or "The tool operation finished."
+    try:
+        follow_up = gemini_chat_completion(
+            model=MODEL, messages=messages, tools=TOOLS,
+            tool_choice="auto",
+        )
+        return follow_up.choices[0].message.content or "The tool operation finished."
+    except APIStatusError as exc:
+        if exc.status_code in (429, 500, 502, 503, 504):
+            return "The inventory action ran, but Gemini is temporarily unavailable (HTTP " + str(exc.status_code) + "). Please ask me to check the result before repeating the action."
+        return "Gemini follow-up failed (HTTP " + str(exc.status_code) + "). Please check the inventory before repeating the action."
 
 
 def refresh_all():
