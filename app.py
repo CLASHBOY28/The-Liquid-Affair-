@@ -421,14 +421,17 @@ TOOLS = [
          "delta": {"type": "integer"}},
          "required": ["name", "category", "delta"]}}},
     {"type": "function", "function": {"name": "list_inventory",
-     "description": "List all inventory items."}},
+     "description": "List all inventory items.",
+     "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
     {"type": "function", "function": {"name": "low_stock",
-     "description": "List items at or below their reorder threshold."}},
+     "description": "List items at or below their reorder threshold.",
+     "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
     {"type": "function", "function": {"name": "add_category",
      "description": "Create an inventory category.", "parameters": {
          "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "list_categories",
-     "description": "List all inventory categories."}},
+     "description": "List all inventory categories.",
+     "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
 ]
 
 
@@ -528,8 +531,12 @@ def _chat_error_message(exc):
 
 
 def _quick_inventory_reply(user_text):
-    """Answer common read-only inventory checks directly, without an AI round-trip."""
-    normalized = " ".join((user_text or "").lower().split()).strip(" .!?")
+    """Handle common inventory commands directly and safely, without an AI round-trip."""
+    import re
+
+    raw = (user_text or "").strip()
+    normalized = " ".join(raw.lower().split()).strip(" .!?")
+
     low_stock_phrases = (
         "show low stock", "show me low stock", "show all low stock",
         "list low stock", "low stock items", "show low stock items",
@@ -537,33 +544,59 @@ def _quick_inventory_reply(user_text):
         "what's low on stock", "what needs reordering", "show reorder list",
         "list items to reorder",
     )
-    if not any(phrase in normalized for phrase in low_stock_phrases):
-        return None
+    if any(phrase in normalized for phrase in low_stock_phrases):
+        records = inventory_records()
+        low_items = [
+            item for item in records
+            if int(item.get("quantity") or 0) <= int(item.get("reorder_threshold") or 0)
+        ]
+        if not low_items:
+            return "You're all set — no items are currently at or below their reorder threshold."
+        lines = [f"### Low-stock items ({len(low_items)})"]
+        for item in low_items:
+            category_data = item.get("categories") or {}
+            if isinstance(category_data, list):
+                category_data = category_data[0] if category_data else {}
+            category = category_data.get("name", "Uncategorised") if isinstance(category_data, dict) else "Uncategorised"
+            lines.append(
+                f"- **{item.get('name', 'Unnamed item')}** — "
+                f"{item.get('quantity', 0)} {item.get('unit') or 'pcs'} available; "
+                f"reorder at {item.get('reorder_threshold', 0)} ({category})."
+            )
+        return "\n".join(lines)
 
-    records = inventory_records()
-    low_items = [
-        item for item in records
-        if item.get("quantity", 0) <= item.get("reorder_threshold", 0)
-    ]
-    if not low_items:
-        return "You're all set — no items are currently at or below their reorder threshold."
+    if normalized in ("list inventory", "show inventory", "show all inventory",
+                      "list all inventory", "display inventory", "inventory list"):
+        records = inventory_records()
+        if not records:
+            return "Your inventory is currently empty."
+        lines = [f"### Inventory ({len(records)} items)"]
+        for item in records:
+            category_data = item.get("categories") or {}
+            if isinstance(category_data, list):
+                category_data = category_data[0] if category_data else {}
+            category = category_data.get("name", "Uncategorised") if isinstance(category_data, dict) else "Uncategorised"
+            lines.append(
+                f"- **{item.get('name', 'Unnamed item')}** — "
+                f"{item.get('quantity', 0)} {item.get('unit') or 'pcs'} "
+                f"({category}; reorder at {item.get('reorder_threshold', 0)})"
+            )
+        return "\n".join(lines)
 
-    lines = [f"### Low-stock items ({len(low_items)})"]
-    for item in low_items:
-        category_data = item.get("categories") or {}
-        if isinstance(category_data, list):
-            category_data = category_data[0] if category_data else {}
-        category = category_data.get("name", "Uncategorised") if isinstance(category_data, dict) else "Uncategorised"
-        name = str(item.get("name") or "Unnamed item")
-        quantity = item.get("quantity", 0)
-        unit = str(item.get("unit") or "pcs")
-        threshold = item.get("reorder_threshold", 0)
-        lines.append(
-            f"- **{name}** — {quantity} {unit} available; reorder at {threshold} "
-            f"({category})."
-        )
-    return "\n".join(lines)
+    # Explicit stock adjustment: "Reduce Straws by 5 in Straws".
+    match = re.fullmatch(
+        r"(reduce|decrease|subtract|deduct|increase|add)\s+(.+?)\s+by\s+(\d+)\s+in\s+(.+)",
+        raw, flags=re.IGNORECASE
+    )
+    if match:
+        verb, item_name, amount, category = match.groups()
+        delta = int(amount) * (-1 if verb.lower() in ("reduce", "decrease", "subtract", "deduct") else 1)
+        try:
+            return adjust_item(item_name.strip(), category.strip(), delta)
+        except Exception as exc:
+            return f"Stock was not changed: {exc}"
 
+    return None
 
 def _object_value(value, key, default=None):
     """Read a field from either an SDK model or a plain dictionary."""
