@@ -1054,6 +1054,7 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 .tla-logo { width:86px !important; height:86px !important; flex:none !important; }
 .tla-brand h1 { margin:0 !important; font-size:clamp(23px,3vw,34px) !important; letter-spacing:1.5px !important; line-height:1.15 !important; }
 .tla-brand p { margin:6px 0 0 !important; font-size:10px !important; letter-spacing:2.2px !important; opacity:.78 !important; }
+.mobile-only { display:none !important; }
 .tla-mobile-card-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr)); gap:12px; width:100%; }
 .tla-mobile-card { min-width:0; padding:16px; border-radius:15px; background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018)); border:1px solid color-mix(in srgb,var(--tla-gold,#d8b66a) 28%,transparent); box-shadow:0 5px 18px rgba(0,0,0,.12); }
 .tla-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
