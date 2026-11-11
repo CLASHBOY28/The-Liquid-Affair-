@@ -634,6 +634,10 @@ def refresh_all():
         gr.update(choices=[r["name"] for r in items]),
         gr.update(choices=[c["name"] for c in cats]),
         gr.update(choices=[f["name"] for f in custom_fields_list()]),
+        mobile_inventory_cards(),
+        mobile_inventory_cards(low_only=True),
+        mobile_category_cards(),
+        mobile_audit_cards(),
     )
 
 
@@ -694,6 +698,82 @@ def add_category_ui(name):
         return f"Could not add category: {exc}", [[c["id"], c["name"]] for c in categories_list()], gr.update()
 
 
+
+def _html_escape(value):
+    """Escape database values before placing them in mobile HTML cards."""
+    from html import escape
+    return escape("" if value is None else str(value))
+
+
+def mobile_inventory_cards(low_only=False):
+    """Compact, touch-friendly inventory cards for narrow Android screens."""
+    records = inventory_records()
+    if low_only:
+        records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
+    if not records:
+        return '<div class="mobile-empty">No inventory items to show.</div>'
+
+    cards = []
+    for item in records:
+        category = (item.get("categories") or {}).get("name") or "Uncategorised"
+        quantity = item.get("quantity", 0)
+        threshold = item.get("reorder_threshold", 0)
+        low = quantity <= threshold
+        status = "Low stock" if low else "In stock"
+        expiry = item.get("expiry_date") or "No expiry date"
+        cards.append(
+            '<article class="tla-mobile-card">'
+            '<div class="tla-card-top"><div><h3>' + _html_escape(item.get("name")) +
+            '</h3><p>' + _html_escape(category) + '</p></div>'
+            '<span class="tla-stock-pill ' + ("low" if low else "ok") + '">' + status + '</span></div>'
+            '<div class="tla-card-metrics"><div><small>Available</small><strong>' +
+            _html_escape(quantity) + ' ' + _html_escape(item.get("unit") or "pcs") +
+            '</strong></div><div><small>Reorder at</small><strong>' +
+            _html_escape(threshold) + '</strong></div></div>'
+            '<p class="tla-card-foot">Expiry: ' + _html_escape(expiry) + '</p>'
+            '</article>'
+        )
+    return '<div class="tla-mobile-card-list">' + "".join(cards) + '</div>'
+
+
+def mobile_category_cards():
+    categories = categories_list()
+    if not categories:
+        return '<div class="mobile-empty">No categories created yet.</div>'
+    return '<div class="tla-mobile-card-list">' + "".join(
+        '<article class="tla-mobile-card tla-category-card"><strong>' +
+        _html_escape(category.get("name")) + '</strong></article>'
+        for category in categories
+    ) + '</div>'
+
+
+def mobile_audit_cards():
+    records = (supabase.table("inventory_audit")
+               .select("created_at, item_name, action, old_quantity, new_quantity, note")
+               .order("created_at", desc=True).limit(100).execute()).data or []
+    if not records:
+        return '<div class="mobile-empty">No stock changes recorded yet.</div>'
+    cards = []
+    for row in records:
+        created = row.get("created_at") or ""
+        try:
+            created = datetime.fromisoformat(created.replace("Z", "+00:00")).astimezone().strftime("%d %b %Y · %I:%M %p")
+        except Exception:
+            pass
+        cards.append(
+            '<article class="tla-mobile-card"><div class="tla-card-top"><div><h3>' +
+            _html_escape(row.get("item_name") or "Inventory item") + '</h3><p>' +
+            _html_escape(row.get("action")) + '</p></div><span class="tla-audit-date">' +
+            _html_escape(created) + '</span></div><div class="tla-card-metrics"><div><small>Previous</small><strong>' +
+            _html_escape(row.get("old_quantity") if row.get("old_quantity") is not None else "—") +
+            '</strong></div><div><small>New quantity</small><strong>' +
+            _html_escape(row.get("new_quantity") if row.get("new_quantity") is not None else "—") +
+            '</strong></div></div><p class="tla-card-foot">' +
+            _html_escape(row.get("note") or "") + '</p></article>'
+        )
+    return '<div class="tla-mobile-card-list">' + "".join(cards) + '</div>'
+
+
 def theme_css(theme):
     palettes = {
         "Neon Lounge": ("#090812", "#171326", "#f5c96a", "#d94dff", "#f5f0ff", "#27d9d0"),
@@ -742,17 +822,67 @@ def brand_header():
 
 
 APP_CSS = """
-.gradio-container {max-width: 1400px !important; margin: auto !important; padding: 18px !important;}
-.tla-header {margin-bottom: 20px !important;}
-.gradio-container .tab-nav button {font-weight: 650 !important; padding: 12px 18px !important;}
-.gradio-container .block {border-radius: 14px !important;}
-.gradio-container input, .gradio-container textarea {border-radius: 10px !important;}
-.gradio-container button {border-radius: 10px !important; font-weight: 650 !important;}
-/* Keep inventory columns readable on phones instead of squeezing every column. */
+:root {color-scheme: dark;}
+html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
+.gradio-container {max-width:1400px !important; width:100% !important; margin:0 auto !important; padding:clamp(8px,2vw,22px) !important; box-sizing:border-box !important;}
+.tla-header {margin-bottom:16px !important;}
+.gradio-container .tab-nav {display:flex !important; gap:6px !important; flex-wrap:wrap !important;}
+.gradio-container .tab-nav button {font-weight:700 !important; padding:12px 18px !important; min-height:44px !important; border-radius:12px !important;}
+.gradio-container .block {border-radius:14px !important; min-width:0 !important;}
+.gradio-container input, .gradio-container textarea, .gradio-container select {border-radius:11px !important; min-height:44px !important; font-size:16px !important;}
+.gradio-container button {border-radius:11px !important; font-weight:700 !important; min-height:44px !important; touch-action:manipulation;}
+.gradio-container .row {min-width:0 !important;}
+.gradio-container .column {min-width:0 !important;}
 .gradio-container .table-wrap, .gradio-container .table-container, .gradio-container .dataframe-container {display:block !important; max-width:100% !important; overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;}
-.gradio-container .table-wrap table, .gradio-container .table-container table, .gradio-container .dataframe-container table {min-width:980px !important; width:max-content !important; table-layout:auto !important;}
-.gradio-container .table-wrap th, .gradio-container .table-wrap td, .gradio-container .table-container th, .gradio-container .table-container td, .gradio-container .dataframe-container th, .gradio-container .dataframe-container td {white-space:nowrap !important; min-width:88px !important; padding:10px 12px !important;}
-@media(max-width:600px) {.gradio-container {padding:8px !important;} .gradio-container .block {padding:10px !important;}}
+.gradio-container .table-wrap table, .gradio-container .table-container table, .gradio-container .dataframe-container table {min-width:900px !important; width:max-content !important; table-layout:auto !important;}
+.gradio-container .table-wrap th, .gradio-container .table-wrap td, .gradio-container .table-container th, .gradio-container .table-container td, .gradio-container .dataframe-container th, .gradio-container .dataframe-container td {white-space:nowrap !important; min-width:84px !important; padding:10px 12px !important;}
+.mobile-only {display:none !important;}
+.tla-mobile-card-list {display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; width:100%;}
+.tla-mobile-card {background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018)); border:1px solid color-mix(in srgb,var(--tla-gold,#d8b66a) 35%,transparent); border-radius:16px; padding:15px; min-width:0; box-shadow:0 8px 22px rgba(0,0,0,.12);}
+.tla-card-top {display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+.tla-card-top h3 {font-size:16px; margin:0 0 4px; overflow-wrap:anywhere;}
+.tla-card-top p,.tla-card-foot {font-size:12px; opacity:.75; margin:0;}
+.tla-stock-pill {font-size:11px; font-weight:800; border-radius:999px; padding:6px 9px; white-space:nowrap;}
+.tla-stock-pill.low {background:rgba(255,91,91,.16); color:#ff9696;}
+.tla-stock-pill.ok {background:rgba(57,205,143,.14); color:#76e6b1;}
+.tla-card-metrics {display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 10px;}
+.tla-card-metrics div {background:rgba(0,0,0,.13); border-radius:11px; padding:9px;}
+.tla-card-metrics small {display:block; opacity:.7; font-size:11px; margin-bottom:4px;}
+.tla-card-metrics strong {font-size:16px; overflow-wrap:anywhere;}
+.tla-card-foot {padding-top:8px; border-top:1px solid rgba(255,255,255,.08); overflow-wrap:anywhere;}
+.tla-audit-date {font-size:10px; opacity:.72; text-align:right; max-width:110px;}
+.mobile-empty {padding:18px; border:1px dashed rgba(255,255,255,.22); border-radius:14px; opacity:.72; text-align:center;}
+.tla-category-card {padding:17px;}
+@media(max-width:700px) {
+  html, body {font-size:16px !important;}
+  .gradio-container {padding:8px 8px calc(18px + env(safe-area-inset-bottom)) !important;}
+  .gradio-container .row {flex-direction:column !important; flex-wrap:nowrap !important; gap:10px !important;}
+  .gradio-container .row > *, .gradio-container .row > .form, .gradio-container .row > .container {width:100% !important; min-width:0 !important; flex:1 1 auto !important;}
+  .gradio-container .tab-nav {position:sticky !important; top:0 !important; z-index:30 !important; flex-wrap:nowrap !important; overflow-x:auto !important; overflow-y:hidden !important; white-space:nowrap !important; padding:7px 2px !important; margin:0 -2px 12px !important; background:var(--tla-bg,#090812) !important; scrollbar-width:none !important;}
+  .gradio-container .tab-nav::-webkit-scrollbar {display:none !important;}
+  .gradio-container .tab-nav button {flex:0 0 auto !important; min-height:46px !important; padding:10px 13px !important; font-size:13px !important;}
+  .tla-header {justify-content:flex-start !important; gap:10px !important; padding:12px 10px !important; border-radius:15px !important;}
+  .tla-logo {width:70px !important; height:70px !important;}
+  .tla-brand {min-width:0 !important;}
+  .tla-brand h1 {font-size:clamp(18px,5.5vw,25px) !important; letter-spacing:1px !important; line-height:1.15 !important;}
+  .tla-brand p {font-size:9px !important; letter-spacing:1px !important; margin-top:5px !important;}
+  .gradio-container h1 {font-size:23px !important;}
+  .gradio-container h2 {font-size:20px !important;}
+  .gradio-container h3 {font-size:17px !important;}
+  .gradio-container .block {padding:11px !important; border-radius:13px !important;}
+  .gradio-container button {width:100% !important; min-height:48px !important;}
+  .gradio-container input, .gradio-container textarea, .gradio-container select {font-size:16px !important; min-height:46px !important;}
+  .desktop-only {display:none !important;}
+  .mobile-only {display:block !important;}
+  .tla-mobile-card-list {grid-template-columns:1fr !important; gap:10px !important;}
+  .tla-mobile-card {padding:14px !important;}
+  .gradio-container .chatbot {height:min(58vh,560px) !important; min-height:340px !important;}
+  .gradio-container .message-wrap {font-size:15px !important;}
+  .gradio-container footer {padding-bottom:env(safe-area-inset-bottom) !important;}
+}
+@media(min-width:701px) {
+  .gradio-container .tab-nav {position:relative;}
+}
 """
 
 
@@ -774,8 +904,9 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### Low-stock items")
             low_table = gr.Dataframe(
                 headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
-                interactive=False, wrap=False
+                interactive=False, wrap=False, elem_classes=["desktop-only"]
             )
+            low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
         with gr.Tab("Inventory"):
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
@@ -799,8 +930,10 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### All inventory")
             gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.")
             inventory_table = gr.Dataframe(
-                headers=inventory_headers(), interactive=True, wrap=False
+                headers=inventory_headers(), interactive=True, wrap=False, elem_classes=["desktop-only"]
             )
+            inventory_mobile = gr.HTML(value=mobile_inventory_cards(), elem_classes=["mobile-only"])
+            gr.Markdown("On a phone, use the item and stock forms above to make changes. The full editable table is available on larger screens.")
             save_table_button = gr.Button("Save table changes", variant="primary")
             table_status = gr.Markdown()
             gr.Markdown("#### Customize your columns")
@@ -819,7 +952,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
             category_button = gr.Button("Add category", variant="primary")
             category_status = gr.Markdown()
-            category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False)
+            category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False, elem_classes=["desktop-only"])
+            category_mobile = gr.HTML(value=mobile_category_cards(), elem_classes=["mobile-only"])
         with gr.Tab("AI assistant"):
             gr.ChatInterface(
                 fn=chat_fn,
@@ -831,17 +965,18 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
         with gr.Tab("Stock history"):
             audit_table = gr.Dataframe(
                 headers=["Date", "Item", "Action", "Old quantity", "New quantity", "Note"],
-                interactive=False, wrap=True
+                interactive=False, wrap=True, elem_classes=["desktop-only"]
             )
+            audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
 
-    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field]
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
     demo.load(refresh_all, outputs=refresh_outputs)
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
         add_item_ui,
         inputs=[item_name, item_category, item_quantity, item_threshold, item_unit, item_expiry],
         outputs=[save_status, summary, inventory_table, low_table, audit_table],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
     adjust_button.click(
         adjust_ui, inputs=[adjust_name, adjust_category, adjust_delta],
         outputs=[adjust_status, summary, inventory_table, low_table, audit_table],
@@ -849,23 +984,23 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
     save_table_button.click(
         save_table_ui, inputs=[inventory_table],
         outputs=[table_status, inventory_table, low_table, summary, audit_table],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
     add_field_button.click(
         custom_field_ui, inputs=[custom_field_name, custom_field_type],
         outputs=[field_status, inventory_table, low_table, manage_field],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
     move_field_button.click(
         move_field_ui, inputs=[manage_field, move_direction],
         outputs=[field_status, inventory_table, low_table],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
     remove_field_button.click(
         remove_field_ui, inputs=[manage_field],
         outputs=[field_status, inventory_table, low_table, manage_field],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
     category_button.click(
         add_category_ui, inputs=[category_name],
         outputs=[category_status, category_table, item_category],
-    )
+    ).then(refresh_all, outputs=refresh_outputs)
 
 
 if __name__ == "__main__":
