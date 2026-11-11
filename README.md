@@ -10,85 +10,73 @@ pinned: false
 
 # The Liquid Affair — Inventory & Bar Operations
 
-A private inventory management app for The Liquid Affair, built with Gradio, OpenAI, and Supabase.
+A private, mobile-friendly inventory and bar-operations web app built with Gradio and Supabase. Its AI assistant supports general conversation and can read or update inventory through guarded server-side tools.
 
 ## Features
 
-- Inventory dashboard with item counts and low-stock alerts
-- Add items and set exact quantities
-- Increase or decrease stock with zero-stock protection
-- Custom categories
-- Stock audit history
-- AI assistant for natural-language inventory operations
+- Inventory dashboard and low-stock alerts
+- Add items, set exact quantities, and adjust stock
+- Categories and customizable inventory columns
+- Stock-change audit history
+- AI assistant with selectable Groq, Gemini, and Cloudflare Workers AI providers
+- Chat-based inventory lookup and updates
 - Login protection using Gradio authentication
 
-## Files
-
-- \`app.py\` — Dashboard, database operations, and AI assistant
-- \`schema.sql\` — Supabase database tables and indexes
-- \`requirements.txt\` — Python dependencies
-- \`.env.example\` — Names of required environment variables (no secrets)
-- \`index.html\` — Earlier standalone browser demo; it is not connected to Supabase
-
-## 1. Set up Supabase
+## Supabase setup
 
 1. Create a Supabase project.
 2. Open **SQL Editor** in the Supabase dashboard.
-3. Paste and run the complete contents of \`schema.sql\`.
-4. In **Project Settings → API**, copy the Project URL and service-role key. Keep the service-role key private.
+3. Run the complete contents of `schema.sql`.
+4. Copy the Project URL and the service-role key from **Project Settings → API**. Keep the service-role key private.
 
-## 2. Configure secrets
+## Environment variables
 
-For local development, copy \`.env.example\` to \`.env\` and fill in the values. Do not commit \`.env\`.
+Set these in Railway's service Variables (or in a local `.env` file):
 
-Required variables:
+**Required**
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `APP_USERNAME`
+- `APP_PASSWORD`
 
-- \`SUPABASE_URL\`
-- \`SUPABASE_SERVICE_ROLE_KEY\`
-- \`OPENAI_API_KEY\`
-- \`APP_USERNAME\`
-- \`APP_PASSWORD\`
+**At least one AI provider**
+- `GROQ_API_KEY` — Groq; defaults to `openai/gpt-oss-120b`
+- `GEMINI_API_KEY` — Google Gemini; defaults to `gemini-3.8-flash`
 
-Optional:
+**Optional fallback**
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_MODEL` — defaults to `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
 
-- \`OPENAI_MODEL\` — defaults to \`gpt-4o-mini\`
-- \`PORT\` — defaults to \`7860\`
+Optional model overrides: `GROQ_MODEL`, `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`. The defaults are documented in `.env.example`.
 
-Use a long, unique password for \`APP_PASSWORD\`.
+Use a long, unique value for `APP_PASSWORD`. Never commit `.env`, API keys, or the Supabase service-role key.
 
-## 3. Run locally
+## Run locally
 
-Requires Python 3.10 or newer.
+Requires Python 3.11 or newer.
 
-\`\`\`bash
+```bash
 python -m venv .venv
 # Windows: .venv\\Scripts\\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 python app.py
-\`\`\`
+```
 
-Open the local URL printed by Gradio and sign in with \`APP_USERNAME\` and \`APP_PASSWORD\`.
+Open the local URL printed by Gradio and sign in with `APP_USERNAME` and `APP_PASSWORD`.
 
-## 4. Deploy on Hugging Face Spaces
+## Deploy
 
-This repository includes the Gradio Space metadata at the top of this README.
-
-1. Create a **private Gradio Space** on Hugging Face.
-2. Upload/push this repository to that Space (or connect the repository if that option is available).
-3. In the Space, open **Settings → Variables and secrets**.
-4. Add the five required secrets listed above. Add \`OPENAI_MODEL\` only if you want a model other than the default.
-5. Restart/rebuild the Space and open its app URL.
-
-The GitHub repository is prepared for this deployment, but the Space itself and its secrets must be created in your hosting account. Do not put credentials in GitHub files or chat messages.
+The repository's `main` branch is connected to the Railway service. Set the required Supabase and login variables, then add at least one AI provider key in the Railway service's production Variables. A new deployment is needed after changing environment variables so the app process reloads them.
 
 ## Security notes
 
-- The Supabase service-role key bypasses Row Level Security. It is used only by the server-side Python process.
-- Keep the Space private and retain the app login. Do not publish the service-role key, OpenAI key, or \`.env\`.
+- The Supabase service-role key bypasses Row Level Security and is used only by the server-side Python process.
+- Keep this service private and retain the app login.
 - No anonymous Supabase read/write policies are created.
-- Audit entries are written for item creation, exact quantity changes, and stock adjustments.
+- Inventory mutations are recorded in `inventory_audit`.
 
 ## Scope
 
-This release covers inventory and stock operations. Event bookings, quotations, event costing, expenses, staff scheduling, and sales reports are not implemented yet and should be added as separate modules after the inventory app is deployed and tested.
+The current release implements inventory, categories, custom inventory columns, low-stock tracking, stock history, and the AI assistant's inventory tools. Event bookings, quotations, costing, expenses, staff scheduling, and sales reporting are not implemented in this release.
