@@ -154,12 +154,104 @@ def write_audit(item_name, action, old_qty=None, new_qty=None, note=None):
     }).execute()
 
 
+def suggest_category_for_item(item_name: str):
+    """Suggest an existing category from saved items and conservative item-name keywords.
+
+    Returns a category name only when the match is unambiguous; otherwise returns
+    an empty string so the user can choose manually.
+    """
+    import re
+    from difflib import SequenceMatcher
+
+    name = (item_name or "").strip().lower()
+    if not name:
+        return ""
+
+    categories = categories_list()
+    if not categories:
+        return ""
+
+    def words(value):
+        return set(re.findall(r"[a-z0-9]+", (value or "").lower()))
+
+    # Reuse the category of an item already in inventory when its name matches.
+    records = inventory_records()
+    exact = [
+        (record.get("categories") or {}).get("name")
+        for record in records
+        if (record.get("name") or "").strip().lower() == name
+        and (record.get("categories") or {}).get("name")
+    ]
+    if len(set(exact)) == 1:
+        return exact[0]
+
+    # A close name match can carry over an existing item's category.
+    best_score, best_category = 0.0, ""
+    for record in records:
+        existing_name = (record.get("name") or "").strip().lower()
+        existing_category = (record.get("categories") or {}).get("name", "")
+        if not existing_name or not existing_category:
+            continue
+        score = SequenceMatcher(None, name, existing_name).ratio()
+        new_words, old_words = words(name), words(existing_name)
+        if new_words and old_words:
+            overlap = len(new_words & old_words) / len(new_words | old_words)
+            score = max(score, overlap)
+        if score > best_score:
+            best_score, best_category = score, existing_category
+    if best_score >= 0.78:
+        return best_category
+
+    # Keyword groups are applied only when the corresponding category already exists.
+    category_aliases = {
+        "juice": {"juice", "juices"},
+        "use & throw": {"useandthrow", "usethrow", "disposable", "disposables"},
+    }
+    keyword_groups = {
+        "juice": {
+            "juice", "mango", "pineapple", "orange", "apple", "grape",
+            "watermelon", "cranberry", "lychee", "passionfruit", "guava",
+            "pomegranate", "mosambi", "lemon", "lime", "fruit",
+        },
+        "use & throw": {
+            "tissue", "tissues", "straw", "straws", "napkin", "napkins",
+            "disposable", "disposables", "paper", "cup", "cups", "plate",
+            "plates", "spoon", "spoons", "fork", "forks", "garbage", "bin",
+        },
+    }
+    normalized_categories = {}
+    for category in categories:
+        category_name = category["name"]
+        compact = "".join(words(category_name))
+        normalized_categories[compact] = category_name
+        normalized_categories[category_name.strip().lower()] = category_name
+
+    matches = []
+    item_words = words(name)
+    for group, keywords in keyword_groups.items():
+        if not (item_words & keywords):
+            continue
+        for alias in category_aliases[group]:
+            if alias in normalized_categories:
+                matches.append(normalized_categories[alias])
+                break
+    matches = list(dict.fromkeys(matches))
+    return matches[0] if len(matches) == 1 else ""
+
+
+def suggest_category_ui(item_name):
+    category = suggest_category_for_item(item_name)
+    return gr.update(value=category) if category else gr.update()
+
+
 def save_item(name, category, quantity, threshold, unit, expiry_date=None):
     name = (name or "").strip()
     category = (category or "").strip()
     unit = (unit or "pcs").strip() or "pcs"
+    if name and not category:
+        category = suggest_category_for_item(name)
     if not name or not category:
-        raise ValueError("Enter an item name and choose a category.")
+        raise ValueError("Could not identify a category. Choose one manually or add a matching item/category first.")
     if quantity is None or int(quantity) < 0 or threshold is None or int(threshold) < 0:
         raise ValueError("Quantity and reorder threshold must be zero or greater.")
     quantity, threshold = int(quantity), int(threshold)
@@ -628,6 +720,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
                 item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
+            item_name.input(fn=suggest_category_ui, inputs=item_name, outputs=item_category)
                 item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Choose an existing category or type a new one.")
             with gr.Row():
                 item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
