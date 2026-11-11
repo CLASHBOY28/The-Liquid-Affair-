@@ -368,7 +368,7 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None):
     if name and not category:
         category = suggest_category_for_item(name)
     if not name or not category:
-        raise ValueError("Could not identify a category. Choose one manually or add a matching item/category first.")
+        raise ValueError("I couldn't confidently identify a category for this new item. Please tell me its category once.")
     if quantity is None or int(quantity) < 0 or threshold is None or int(threshold) < 0:
         raise ValueError("Quantity and reorder threshold must be zero or greater.")
     quantity, threshold = int(quantity), int(threshold)
@@ -471,8 +471,12 @@ def save_inventory_table(data):
 
 def adjust_item(name, category, delta):
     name, category = (name or "").strip(), (category or "").strip()
-    if not name or not category or delta is None:
-        raise ValueError("Enter the item, category, and stock change.")
+    if not name or delta is None:
+        raise ValueError("Enter the item and stock change.")
+    if not category:
+        category = suggest_category_for_item(name)
+    if not category:
+        raise ValueError(f"I couldn't identify a unique category for {name}. Please select its category.")
     cat_id = category_id_for(category, create=False)
     if cat_id is None:
         raise ValueError(f"Category '{category}' does not exist.")
@@ -513,20 +517,20 @@ def dashboard_summary():
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_or_update_item",
-     "description": "Add an inventory item or set its exact quantity. Creates the category if needed.",
+     "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Do not ask for category when the item already exists.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string"},
          "quantity": {"type": "integer", "minimum": 0},
          "reorder_threshold": {"type": "integer", "minimum": 0},
          "unit": {"type": "string"},
          "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
-         "required": ["name", "category", "quantity"]}}},
+         "required": ["name", "quantity"]}}},
     {"type": "function", "function": {"name": "adjust_stock",
-     "description": "Increase or decrease an existing item's stock by a delta.",
+     "description": "Increase or decrease an existing item's stock by a delta. Category is optional; infer it from saved inventory. Ask only if the item name is ambiguous.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string"},
          "delta": {"type": "integer"}},
-         "required": ["name", "category", "delta"]}}},
+         "required": ["name", "delta"]}}},
     {"type": "function", "function": {"name": "list_inventory",
      "description": "List all inventory items.",
      "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
@@ -616,7 +620,8 @@ INVENTORY AND BUSINESS DATA:
 - Never invent inventory quantities, categories, expiry dates, or successful writes.
 - “Add/set stock to N” means set the exact quantity to N. “Increase/decrease by N”
   means adjust the current quantity by that amount.
-- Ask for missing or ambiguous item/category details before changing stock.
+- For an existing inventory item, its saved category is the source of truth. If the user gives the item name and quantity or stock change, do NOT ask for its category; call the tool with item name and quantity/delta only and let the app infer the category.
+- Ask for category only when the item is new and no confident category can be inferred, or when the same item name exists in multiple categories.
 - Explain tool results in clear, natural language. Do not expose raw JSON to the user.
 - If a tool returns an error, explain that the operation did not complete.
 - Never perform an inventory write merely because the user is discussing an item;
