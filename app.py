@@ -1359,24 +1359,23 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             gr.Markdown("Use the forms above to edit items and stock. The full editable table is available on larger screens.", elem_classes=["desktop-only"])
             save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
             table_status = gr.Markdown(elem_classes=["desktop-only"])
-            gr.Markdown("#### Customize your columns")
-            gr.Markdown("Add fields such as Brand, Supplier, Bottle size, Storage location, Batch number, or Notes. Move or remove custom columns whenever you need.")
-            with gr.Row():
-                custom_field_name = gr.Textbox(label="New column name", placeholder="Supplier")
-                custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value="text")
-                add_field_button = gr.Button("Add column", variant="primary")
-            field_status = gr.Markdown()
-            with gr.Row():
-                manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()])
-                move_direction = gr.Radio(choices=["up", "down"], value="up", label="Move")
-                move_field_button = gr.Button("Move column")
-                remove_field_button = gr.Button("Remove column", variant="stop")
         with gr.Tab("Categories"):
+            gr.Markdown("### Manage categories")
             category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
             category_button = gr.Button("Add category", variant="primary")
             category_status = gr.Markdown()
             category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False, elem_classes=["desktop-only"])
             category_mobile = gr.HTML(value=mobile_category_cards(), elem_classes=["mobile-only"])
+            with gr.Accordion("Customize inventory columns", open=False):
+                gr.Markdown("Add extra fields to your inventory, then move or remove them here.")
+                custom_field_name = gr.Textbox(label="New column name", placeholder="Supplier")
+                custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value="text")
+                add_field_button = gr.Button("Add column", variant="primary")
+                field_status = gr.Markdown()
+                manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()])
+                move_direction = gr.Radio(choices=["up", "down"], value="up", label="Move")
+                move_field_button = gr.Button("Move column")
+                remove_field_button = gr.Button("Remove column", variant="stop")
         with gr.Tab("AI assistant"):
             with gr.Row(equal_height=True):
                 gr.Markdown("### 🤖 AI Assistant", scale=2)
