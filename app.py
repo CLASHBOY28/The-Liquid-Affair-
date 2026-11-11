@@ -1074,14 +1074,36 @@ html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
 .mobile-empty {padding:18px; border:1px dashed rgba(255,255,255,.22); border-radius:14px; opacity:.72; text-align:center;}
 .tla-category-card {padding:17px;}
 @media(max-width:700px) {
-  html, body {font-size:16px !important;}
-  .gradio-container {padding:8px 8px calc(18px + env(safe-area-inset-bottom)) !important;}
-  .gradio-container .row {flex-direction:column !important; flex-wrap:nowrap !important; gap:10px !important;}
+  html, body {font-size:16px !important; width:100% !important; min-width:320px !important;}
+  body {overflow-x:hidden !important;}
+  .gradio-container {padding:6px 8px calc(18px + env(safe-area-inset-bottom)) !important; gap:10px !important;}
+  /* Keep form rows readable on phones without stretching every nested control. */
+  .gradio-container .row {flex-direction:column !important; flex-wrap:nowrap !important; gap:9px !important; min-width:0 !important;}
   .gradio-container .row > *, .gradio-container .row > .form, .gradio-container .row > .container {width:100% !important; min-width:0 !important; flex:1 1 auto !important;}
-  .gradio-container .tab-nav {position:sticky !important; top:0 !important; z-index:30 !important; flex-wrap:nowrap !important; overflow-x:auto !important; overflow-y:hidden !important; white-space:nowrap !important; padding:7px 2px !important; margin:0 -2px 12px !important; background:var(--tla-bg,#090812) !important; scrollbar-width:none !important;}
-  .gradio-container .tab-nav::-webkit-scrollbar {display:none !important;}
-  .gradio-container .tab-nav button {flex:0 0 auto !important; min-height:46px !important; padding:10px 13px !important; font-size:13px !important;}
-  .tla-header {justify-content:flex-start !important; gap:10px !important; padding:12px 10px !important; border-radius:15px !important;}
+  /* Gradio 6 may collapse the tab labels into an ellipsis menu on narrow screens.
+     Force the real tab buttons to remain visible in a two-row, touch-friendly grid. */
+  .gradio-container .tabs, .gradio-container [role="tablist"], .gradio-container .tab-nav {
+    display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
+    align-items:stretch !important; justify-content:flex-start !important;
+    gap:6px !important; width:100% !important; max-width:100% !important;
+    height:auto !important; max-height:none !important; overflow:visible !important;
+    white-space:normal !important; position:relative !important;
+    padding:6px 0 10px !important; margin:0 0 10px !important;
+    background:var(--tla-bg,#090812) !important; scrollbar-width:auto !important;
+  }
+  .gradio-container .tab-nav button, .gradio-container [role="tablist"] button,
+  .gradio-container button[role="tab"] {
+    display:inline-flex !important; visibility:visible !important; opacity:1 !important;
+    flex:1 1 calc(50% - 6px) !important; width:auto !important; min-width:0 !important;
+    max-width:calc(50% - 3px) !important; min-height:44px !important;
+    justify-content:center !important; align-items:center !important;
+    padding:9px 7px !important; margin:0 !important; font-size:12px !important;
+    line-height:1.2 !important; white-space:normal !important; text-align:center !important;
+  }
+  .gradio-container .tab-nav button[aria-label*="more"],
+  .gradio-container .tab-nav button[aria-label*="More"],
+  .gradio-container [role="tablist"] button[aria-label*="more"] {display:none !important;}
+  .tla-header {justify-content:flex-start !important; gap:10px !important; padding:12px 10px !important; border-radius:15px !important; margin-top:0 !important;}
   .tla-logo {width:70px !important; height:70px !important;}
   .tla-brand {min-width:0 !important;}
   .tla-brand h1 {font-size:clamp(18px,5.5vw,25px) !important; letter-spacing:1px !important; line-height:1.15 !important;}
@@ -1089,16 +1111,23 @@ html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
   .gradio-container h1 {font-size:23px !important;}
   .gradio-container h2 {font-size:20px !important;}
   .gradio-container h3 {font-size:17px !important;}
-  .gradio-container .block {padding:11px !important; border-radius:13px !important;}
-  .gradio-container button {width:100% !important; min-height:48px !important;}
+  .gradio-container .block {padding:10px !important; border-radius:13px !important; min-width:0 !important;}
+  .gradio-container button {min-height:46px !important;}
   .gradio-container input, .gradio-container textarea, .gradio-container select {font-size:16px !important; min-height:46px !important;}
+  .gradio-container .form button, .gradio-container .primary, .gradio-container .stop {width:100% !important;}
   .desktop-only {display:none !important;}
-  .mobile-only {display:block !important;}
-  .tla-mobile-card-list {grid-template-columns:1fr !important; gap:10px !important;}
-  .tla-mobile-card {padding:14px !important;}
+  .mobile-only {display:block !important; width:100% !important; min-width:0 !important;}
+  .tla-mobile-card-list {grid-template-columns:minmax(0,1fr) !important; gap:9px !important; width:100% !important;}
+  .tla-mobile-card {padding:13px !important; border-radius:15px !important;}
+  .tla-card-metrics {gap:8px !important; margin:11px 0 9px !important;}
+  .tla-card-metrics div {min-width:0 !important; padding:9px 8px !important;}
+  .tla-card-metrics strong {font-size:15px !important;}
+  .tla-stock-pill {font-size:10px !important; padding:5px 8px !important;}
   .gradio-container .chatbot {height:min(58vh,560px) !important; min-height:340px !important;}
   .gradio-container .message-wrap {font-size:15px !important;}
   .gradio-container footer {padding-bottom:env(safe-area-inset-bottom) !important;}
+  /* Remove excess vertical whitespace around the first screen. */
+  .gradio-container > .wrap {padding-top:0 !important; margin-top:0 !important;}
 }
 @media(min-width:701px) {
   .gradio-container .tab-nav {position:relative;}
