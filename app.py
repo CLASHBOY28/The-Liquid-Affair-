@@ -12,6 +12,7 @@ from supabase import Client, create_client
 from chatbot_capabilities import calculate_math, current_india_time_context
 from app_auth import load_auth_users
 from audit_identity import pack_actor_note, unpack_actor_note
+from inventory_matching import normalized_name, unique_item_names, unique_labels
 
 load_dotenv()
 
@@ -183,19 +184,23 @@ def ai_chat_completion(provider="Auto (recommended)", **kwargs):
     )
 
 def category_id_for(name: str, create: bool = False):
-    name = name.strip().lower()
-    if not name:
+    display_name = (name or "").strip()
+    key = normalized_name(display_name)
+    if not key:
         raise ValueError("Enter a category name.")
-    result = supabase.table("categories").select("id").eq("name", name).limit(1).execute()
-    if result.data:
-        return result.data[0]["id"]
+    result = supabase.table("categories").select("id, name").execute()
+    existing = next(
+        (row for row in (result.data or []) if normalized_name(row.get("name")) == key),
+        None,
+    )
+    if existing:
+        return existing["id"]
     if not create:
         return None
-    inserted = supabase.table("categories").insert({"name": name}).execute()
+    inserted = supabase.table("categories").insert({"name": display_name.lower()}).execute()
     if not inserted.data:
         raise RuntimeError("Could not create category.")
     return inserted.data[0]["id"]
-
 
 def categories_list():
     result = supabase.table("categories").select("id, name").order("name").execute()
@@ -218,6 +223,22 @@ def inventory_records():
               .order("name").execute())
     return result.data or []
 
+
+def find_item_by_name_and_category(name, category_id):
+    """Look up an item without treating letter case as part of its identity."""
+    result = (supabase.table("inventory_items").select("id, name, quantity")
+              .eq("category_id", category_id).execute())
+    key = normalized_name(name)
+    matches = [
+        row for row in (result.data or [])
+        if normalized_name(row.get("name")) == key
+    ]
+    if len(matches) > 1:
+        raise ValueError(
+            "This category has multiple items that differ only by capitalization. "
+            "Resolve the duplicate rows before changing stock."
+        )
+    return matches[0] if matches else None
 
 def inventory_headers():
     return ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date"] + [
@@ -306,7 +327,7 @@ def suggest_category_for_item(item_name: str):
     import re
     from difflib import SequenceMatcher
 
-    name = (item_name or "").strip().lower()
+    name = normalized_name(item_name)
     if not name:
         return ""
 
@@ -315,14 +336,14 @@ def suggest_category_for_item(item_name: str):
         return ""
 
     def words(value):
-        return set(re.findall(r"[a-z0-9]+", (value or "").lower()))
+        return set(re.findall(r"[a-z0-9]+", normalized_name(value)))
 
     # Reuse the category of an item already in inventory when its name matches.
     records = inventory_records()
     exact = [
         (record.get("categories") or {}).get("name")
         for record in records
-        if (record.get("name") or "").strip().lower() == name
+        if normalized_name(record.get("name")) == name
         and (record.get("categories") or {}).get("name")
     ]
     if len(set(exact)) == 1:
@@ -331,7 +352,7 @@ def suggest_category_for_item(item_name: str):
     # A close name match can carry over an existing item's category.
     best_score, best_category = 0.0, ""
     for record in records:
-        existing_name = (record.get("name") or "").strip().lower()
+        existing_name = normalized_name(record.get("name"))
         existing_category = (record.get("categories") or {}).get("name", "")
         if not existing_name or not existing_category:
             continue
@@ -347,7 +368,7 @@ def suggest_category_for_item(item_name: str):
 
     # Keyword groups are applied only when the corresponding category already exists.
     def compact(value):
-        return "".join(re.findall(r"[a-z0-9]+", (value or "").lower()))
+        return "".join(re.findall(r"[a-z0-9]+", normalized_name(value)))
 
     # Match category names using normalized aliases, regardless of spaces,
     # ampersands, or singular/plural wording.
@@ -388,7 +409,7 @@ def suggest_category_for_item(item_name: str):
         if category_words and category_words.issubset(item_words):
             matches.append(category["name"])
 
-    matches = list(dict.fromkeys(matches))
+    matches = unique_labels(matches)
     return matches[0] if len(matches) == 1 else ""
 
 
@@ -400,18 +421,13 @@ def inventory_item_form_defaults(item_name):
 
     matches = [
         record for record in inventory_records()
-        if (record.get("name") or "").strip().casefold() == name.casefold()
+        if normalized_name(record.get("name")) == normalized_name(name)
     ]
     if matches:
-        categories = list(dict.fromkeys(
-            ((record.get("categories") or {}).get("name") or "").strip()
-            for record in matches
-            if ((record.get("categories") or {}).get("name") or "").strip()
-        ))
-        units = list(dict.fromkeys(
-            (record.get("unit") or "pcs").strip() or "pcs"
-            for record in matches
-        ))
+        categories = unique_labels(
+            (record.get("categories") or {}).get("name") for record in matches
+        )
+        units = unique_labels(record.get("unit") or "pcs" for record in matches)
 
         if len(categories) == 1:
             category_update = gr.update(value=categories[0])
@@ -434,7 +450,6 @@ def inventory_item_form_defaults(item_name):
     category = suggest_category_for_item(name)
     return gr.update(value=category or None), gr.update()
 
-
 def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor=None):
     name = (name or "").strip()
     category = (category or "").strip()
@@ -450,15 +465,15 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor
     if expiry_date:
         datetime.strptime(expiry_date, "%Y-%m-%d")
     cat_id = category_id_for(category, create=True)
-    found = (supabase.table("inventory_items").select("id, quantity")
-             .eq("name", name).eq("category_id", cat_id).limit(1).execute())
-    if found.data:
-        old = found.data[0]["quantity"]
+    found = find_item_by_name_and_category(name, cat_id)
+    if found:
+        name = found["name"]
+        old = found["quantity"]
         (supabase.table("inventory_items").update({
             "quantity": quantity, "reorder_threshold": threshold,
             "unit": unit, "expiry_date": expiry_date,
             "updated_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", found.data[0]["id"]).execute())
+        }).eq("id", found["id"]).execute())
         write_audit(name, "set_quantity", old, quantity, "Set from inventory form", actor)
         return f"Updated {name}: {old} → {quantity} {unit}."
     (supabase.table("inventory_items").insert({
@@ -468,16 +483,15 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor
     write_audit(name, "create", None, quantity, "Added from inventory form", actor)
     return f"Added {name}: {quantity} {unit}."
 
-
 def add_custom_field(name, field_type="text", actor=None):
     name = (name or "").strip()
     if not name:
         raise ValueError("Enter a column name.")
-    reserved = {h.lower() for h in ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"]}
-    if name.lower() in reserved:
+    reserved = {h.casefold() for h in ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"]}
+    if name.casefold() in reserved:
         raise ValueError("That name is already used by a standard inventory column.")
-    existing = [f["name"].lower() for f in custom_fields_list()]
-    if name.lower() in existing:
+    existing = [f["name"].casefold() for f in custom_fields_list()]
+    if name.casefold() in existing:
         raise ValueError("That custom column already exists.")
     if field_type not in ("text", "number", "date"):
         field_type = "text"
@@ -491,7 +505,7 @@ def add_custom_field(name, field_type="text", actor=None):
 
 def move_custom_field(name, direction, actor=None):
     fields = custom_fields_list()
-    index = next((i for i, field in enumerate(fields) if field["name"] == name), None)
+    index = next((i for i, field in enumerate(fields) if normalized_name(field["name"]) == normalized_name(name)), None)
     if index is None:
         raise ValueError("Choose a custom column.")
     other = index - 1 if direction == "up" else index + 1
@@ -505,7 +519,7 @@ def move_custom_field(name, direction, actor=None):
 
 
 def remove_custom_field(name, actor=None):
-    field = next((f for f in custom_fields_list() if f["name"] == name), None)
+    field = next((f for f in custom_fields_list() if normalized_name(f["name"]) == normalized_name(name)), None)
     if not field:
         raise ValueError("Choose a custom column.")
     supabase.table("inventory_custom_fields").delete().eq("id", field["id"]).execute()
@@ -573,20 +587,19 @@ def adjust_item(name, category, delta, actor=None):
     cat_id = category_id_for(category, create=False)
     if cat_id is None:
         raise ValueError(f"Category '{category}' does not exist.")
-    found = (supabase.table("inventory_items").select("id, quantity")
-             .eq("name", name).eq("category_id", cat_id).limit(1).execute())
-    if not found.data:
+    found = find_item_by_name_and_category(name, cat_id)
+    if not found:
         raise ValueError(f"{name} was not found in {category}.")
-    old = found.data[0]["quantity"]
+    name = found["name"]
+    old = found["quantity"]
     new = old + int(delta)
     if new < 0:
         raise ValueError(f"Not enough stock. Current quantity is {old}.")
     (supabase.table("inventory_items").update({
         "quantity": new, "updated_at": datetime.now(timezone.utc).isoformat()
-    }).eq("id", found.data[0]["id"]).execute())
+    }).eq("id", found["id"]).execute())
     write_audit(name, "adjust", old, new, f"delta={int(delta)}", actor)
     return f"{name}: {old} → {new}."
-
 
 def add_category(name, actor=None):
     existing = category_id_for(name, create=False)
@@ -967,11 +980,9 @@ def refresh_all():
         gr.update(value=inventory_rows(low_only=True), headers=inventory_headers()),
         [[c["id"], c["name"]] for c in cats],
         audit_rows(),
-        gr.update(choices=list(dict.fromkeys(
-            (item.get("name") or "").strip() for item in items if (item.get("name") or "").strip()
-        ))),
+        gr.update(choices=unique_item_names(items)),
         gr.update(choices=[c["name"] for c in cats]),
-        gr.update(choices=[r["name"] for r in items]),
+        gr.update(choices=unique_item_names(items)),
         gr.update(choices=[c["name"] for c in cats]),
         gr.update(choices=[f["name"] for f in custom_fields_list()]),
         mobile_inventory_cards(),
@@ -993,24 +1004,21 @@ def add_item_ui(name, category, quantity, threshold, unit, expiry_date, request:
 
 def suggest_adjust_category(item_name):
     """Auto-select the item's category when its name identifies one category."""
-    name = (item_name or "").strip().casefold()
+    name = normalized_name(item_name)
     if not name:
         return gr.update(value=None)
     matches = [
         record for record in inventory_records()
-        if (record.get("name") or "").strip().casefold() == name
+        if normalized_name(record.get("name")) == name
     ]
-    category_names = list(dict.fromkeys(
-        ((record.get("categories") or {}).get("name") or "").strip()
-        for record in matches
-        if ((record.get("categories") or {}).get("name") or "").strip()
-    ))
+    category_names = unique_labels(
+        (record.get("categories") or {}).get("name") for record in matches
+    )
     if len(category_names) == 1:
         return gr.update(value=category_names[0])
     if len(category_names) > 1:
         return gr.update(value=None, info="This item name exists in multiple categories. Please select the correct category.")
     return gr.update(value=None)
-
 
 def adjust_ui(name, category, delta, request: gr.Request = None):
     try:
