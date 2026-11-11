@@ -392,9 +392,47 @@ def suggest_category_for_item(item_name: str):
     return matches[0] if len(matches) == 1 else ""
 
 
-def suggest_category_ui(item_name):
-    category = suggest_category_for_item(item_name)
-    return gr.update(value=category) if category else gr.update()
+def inventory_item_form_defaults(item_name):
+    """Fill saved category/unit when an inventory item is selected by name."""
+    name = (item_name or "").strip()
+    if not name:
+        return gr.update(value=None), gr.update()
+
+    matches = [
+        record for record in inventory_records()
+        if (record.get("name") or "").strip().casefold() == name.casefold()
+    ]
+    if matches:
+        categories = list(dict.fromkeys(
+            ((record.get("categories") or {}).get("name") or "").strip()
+            for record in matches
+            if ((record.get("categories") or {}).get("name") or "").strip()
+        ))
+        units = list(dict.fromkeys(
+            (record.get("unit") or "pcs").strip() or "pcs"
+            for record in matches
+        ))
+
+        if len(categories) == 1:
+            category_update = gr.update(value=categories[0])
+        elif len(categories) > 1:
+            category_update = gr.update(
+                value=None,
+                info="This item name is in multiple categories. Select the right category.",
+            )
+        else:
+            category_update = gr.update(value=None)
+
+        if len(units) == 1:
+            unit_update = gr.update(value=units[0])
+        else:
+            unit_update = gr.update(
+                info="This item name has different units in multiple categories. Confirm the unit.",
+            )
+        return category_update, unit_update
+
+    category = suggest_category_for_item(name)
+    return gr.update(value=category or None), gr.update()
 
 
 def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor=None):
@@ -929,6 +967,9 @@ def refresh_all():
         gr.update(value=inventory_rows(low_only=True), headers=inventory_headers()),
         [[c["id"], c["name"]] for c in cats],
         audit_rows(),
+        gr.update(choices=list(dict.fromkeys(
+            (item.get("name") or "").strip() for item in items if (item.get("name") or "").strip()
+        ))),
         gr.update(choices=[c["name"] for c in cats]),
         gr.update(choices=[r["name"] for r in items]),
         gr.update(choices=[c["name"] for c in cats]),
@@ -1419,13 +1460,20 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         with gr.Column(visible=False, elem_classes=["tla-page"]) as inventory_page:
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
-                item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
+                item_name = gr.Dropdown(
+                    label="Item name", choices=[], allow_custom_value=True, filterable=True,
+                    info="Choose an existing item or type a new name.",
+                )
                 item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
-            item_name.input(fn=suggest_category_ui, inputs=item_name, outputs=item_category)
             with gr.Row():
                 item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
                 item_unit = gr.Textbox(label="Unit", value="bottles")
                 item_threshold = gr.Number(label="Reorder threshold", value=5, precision=0)
+            item_name.change(
+                fn=inventory_item_form_defaults,
+                inputs=item_name,
+                outputs=[item_category, item_unit],
+            )
             item_expiry = gr.Textbox(label="Expiry date (YYYY-MM-DD, optional)", placeholder="2027-06-30")
             save_button = gr.Button("Save item", variant="primary")
             save_status = gr.Markdown()
@@ -1518,7 +1566,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             queue=False,
         )
 
-    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
     demo.load(refresh_all, outputs=refresh_outputs)
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
