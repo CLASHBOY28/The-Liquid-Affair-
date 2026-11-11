@@ -1488,3 +1488,22 @@ if __name__ == "__main__":
     )
 
 # Mobile navigation layout update: tabs remain visible on narrow screens.
+
+
+/* Override generic mobile .row stacking rules specifically for the app navigation. */
+@media (max-width: 760px) {
+  .gradio-container .row.tla-mobile-nav {
+    display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+    align-items:stretch !important; gap:4px !important; width:100% !important;
+    min-width:0 !important; margin:0 0 12px !important;
+  }
+  .gradio-container .row.tla-mobile-nav > * {
+    display:flex !important; flex:1 1 0 !important; width:0 !important;
+    min-width:0 !important; max-width:none !important; margin:0 !important;
+  }
+  .gradio-container .row.tla-mobile-nav button {
+    width:100% !important; min-width:0 !important; padding:8px 2px !important;
+    min-height:48px !important; font-size:clamp(9px,2.6vw,12px) !important;
+    line-height:1.1 !important; white-space:normal !important; overflow-wrap:anywhere !important;
+  }
+}
