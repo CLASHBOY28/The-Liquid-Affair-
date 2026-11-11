@@ -25,8 +25,8 @@ class MainActivity : Activity() {
 
     companion object {
         private const val APP_URL = "https://liquid-affair-app-production.up.railway.app"
-        private const val BG = Color.rgb(9, 8, 18)
-        private const val GOLD = Color.rgb(231, 190, 104)
+        private val BG = Color.rgb(9, 8, 18)
+        private val GOLD = Color.rgb(231, 190, 104)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
