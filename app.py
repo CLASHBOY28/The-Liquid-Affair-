@@ -1194,6 +1194,26 @@ def brand_header():
 APP_CSS = """
 :root { color-scheme: dark; }
 .theme-style-host { display:none !important; }
+.gradio-container .inventory-table-section {
+  gap:10px !important;
+  padding:14px !important;
+  border:1px solid color-mix(in srgb,var(--tla-gold) 35%,transparent) !important;
+  background:var(--tla-panel) !important;
+}
+.gradio-container .inventory-table-section .inventory-table-intro,
+.gradio-container .inventory-table-section .inventory-table-content {
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  box-shadow:none !important;
+  background:transparent !important;
+}
+.gradio-container .inventory-table-section .inventory-table-intro .prose { margin:0 !important; }
+.gradio-container .inventory-table-section .inventory-table-content .table-container {
+  overflow:hidden !important;
+  border:1px solid color-mix(in srgb,var(--tla-gold) 25%,transparent) !important;
+  border-radius:12px !important;
+}
 .tla-app-shell { width:100% !important; min-width:0 !important; gap:12px !important; }
 .tla-mobile-nav { display:flex !important; flex-flow:row nowrap !important; align-items:stretch !important; gap:6px !important; width:100% !important; min-width:0 !important; }
 .tla-nav-button { flex:1 1 0 !important; min-width:0 !important; width:0 !important; padding:9px 3px !important; font-size:clamp(9px,2.65vw,13px) !important; line-height:1.15 !important; white-space:normal !important; overflow-wrap:anywhere !important; }
@@ -1514,15 +1534,18 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 )
             adjust_button = gr.Button("Adjust stock")
             adjust_status = gr.Markdown()
-            gr.Markdown("#### All inventory")
-            gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.", elem_classes=["desktop-only"])
-            inventory_table = gr.Dataframe(
-                headers=inventory_headers(), interactive=True, wrap=False, elem_classes=["desktop-only"]
-            )
-            inventory_mobile = gr.HTML(value=mobile_inventory_cards(), elem_classes=["mobile-only"])
-            gr.Markdown("Use the forms above to edit items and stock. The full editable table is available on larger screens.", elem_classes=["desktop-only"])
-            save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
-            table_status = gr.Markdown(elem_classes=["desktop-only"])
+            with gr.Column(elem_classes=["inventory-table-section"]):
+                gr.Markdown(
+                    "#### All inventory\n\nView every item here. On larger screens, edit quantities, expiry dates, and custom values in the table, then save. On smaller screens, use the stock forms above.",
+                    elem_classes=["inventory-table-intro"],
+                )
+                inventory_table = gr.Dataframe(
+                    headers=inventory_headers(), interactive=True, wrap=False,
+                    elem_classes=["desktop-only", "inventory-table-content"],
+                )
+                inventory_mobile = gr.HTML(value=mobile_inventory_cards(), elem_classes=["mobile-only"])
+                save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
+                table_status = gr.Markdown(elem_classes=["desktop-only"])
         with gr.Column(visible=False, elem_classes=["tla-page"]) as categories_page:
             gr.Markdown("### Manage categories")
             category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
