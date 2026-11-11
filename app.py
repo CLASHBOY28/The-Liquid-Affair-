@@ -1112,7 +1112,19 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
   .gradio-container .tab-nav, .gradio-container [role="tablist"] { display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important; gap:7px !important; width:100% !important; max-width:100% !important; height:auto !important; overflow-x:auto !important; overflow-y:hidden !important; white-space:nowrap !important; padding:5px 2px 11px !important; margin:0 0 10px !important; scrollbar-width:none !important; -webkit-overflow-scrolling:touch !important; background:var(--tla-bg,#090812) !important; }
   .gradio-container .tab-nav::-webkit-scrollbar, .gradio-container [role="tablist"]::-webkit-scrollbar { display:none !important; }
   .gradio-container .tab-nav button, .gradio-container [role="tablist"] button, .gradio-container button[role="tab"] { display:inline-flex !important; visibility:visible !important; opacity:1 !important; flex:0 0 auto !important; width:auto !important; max-width:none !important; min-width:max-content !important; min-height:43px !important; padding:10px 14px !important; margin:0 !important; font-size:13px !important; line-height:1.15 !important; white-space:nowrap !important; }
-  .gradio-container .tab-nav button[aria-label*="more"], .gradio-container .tab-nav button[aria-label*="More"], .gradio-container [role="tablist"] button[aria-label*="more"] { display:none !important; }
+  /* Remove Gradio's overflow/ellipsis tab menu; show the actual section tabs. */
+  .gradio-container .tab-nav button[aria-label*="more"],
+  .gradio-container .tab-nav button[aria-label*="More"],
+  .gradio-container [role="tablist"] button[aria-label*="more"],
+  .gradio-container [role="tablist"] button[aria-label*="More"],
+  .gradio-container .tab-nav .more,
+  .gradio-container .tab-nav [data-testid*="more"],
+  .gradio-container [role="tablist"] [data-testid*="more"] { display:none !important; }
+  .gradio-container .tab-nav { border-bottom:1px solid rgba(255,255,255,.12) !important; }
+  .gradio-container .tab-nav button[role="tab"],
+  .gradio-container [role="tablist"] button[role="tab"] { border-radius:10px 10px 0 0 !important; font-weight:700 !important; }
+  .gradio-container .tab-nav button.selected,
+  .gradio-container [role="tablist"] button[aria-selected="true"] { color:#f39a52 !important; border-bottom:2px solid #f39a52 !important; }
   .tla-header { gap:12px !important; padding:12px 14px !important; margin-bottom:10px !important; border-radius:15px !important; }
   .tla-logo { width:62px !important; height:62px !important; }
   .tla-brand h1 { font-size:clamp(18px,5.2vw,24px) !important; letter-spacing:1px !important; }
