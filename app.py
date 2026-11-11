@@ -1245,6 +1245,62 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
   .tla-kpi { padding:10px !important; }
   .tla-kpi strong { font-size:20px !important; }
 }
+
+/* Final Android tab-navigation override.
+   Gradio adds an overflow-menu button when the tab labels do not fit.
+   Keep only real tabs and make the strip swipeable instead. */
+@media (max-width: 760px) {
+  .gradio-container .tab-nav,
+  .gradio-container [role="tablist"] {
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    justify-content:flex-start !important;
+    align-items:center !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    white-space:nowrap !important;
+    gap:clamp(12px, 4vw, 22px) !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    scrollbar-width:none !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+  .gradio-container .tab-nav::-webkit-scrollbar,
+  .gradio-container [role="tablist"]::-webkit-scrollbar { display:none !important; }
+
+  /* Gradio's three-dot overflow control is not a tab. */
+  .gradio-container .tab-nav button:not([role="tab"]),
+  .gradio-container [role="tablist"] button:not([role="tab"]),
+  .gradio-container .tab-nav [aria-haspopup="menu"],
+  .gradio-container [role="tablist"] [aria-haspopup="menu"],
+  .gradio-container .tab-nav [data-testid*="overflow"],
+  .gradio-container .tab-nav [data-testid*="more"],
+  .gradio-container [role="tablist"] [data-testid*="overflow"],
+  .gradio-container [role="tablist"] [data-testid*="more"] {
+    display:none !important;
+    visibility:hidden !important;
+    width:0 !important;
+    min-width:0 !important;
+    padding:0 !important;
+    margin:0 !important;
+  }
+  .gradio-container .tab-nav button[role="tab"],
+  .gradio-container [role="tablist"] button[role="tab"],
+  .gradio-container button[role="tab"] {
+    display:inline-flex !important;
+    flex:0 0 auto !important;
+    width:auto !important;
+    min-width:max-content !important;
+    max-width:none !important;
+    white-space:nowrap !important;
+    padding:10px 3px !important;
+    min-height:46px !important;
+    font-size:14px !important;
+    border-radius:0 !important;
+    background:transparent !important;
+  }
+}
 """
 
 
