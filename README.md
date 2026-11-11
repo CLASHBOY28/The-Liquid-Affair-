@@ -20,7 +20,7 @@ A private, mobile-friendly inventory and bar-operations web app built with Gradi
 - Stock-change audit history
 - AI assistant with selectable Groq, Gemini, and Cloudflare Workers AI providers
 - Chat-based inventory lookup and updates
-- Login protection using Gradio authentication
+- Two individual logins with shared inventory and named user history
 
 ## Supabase setup
 
@@ -39,6 +39,10 @@ Set these in Railway's service Variables (or in a local `.env` file):
 - `APP_USERNAME`
 - `APP_PASSWORD`
 
+**Optional second login**
+- `APP_USERNAME_2`
+- `APP_PASSWORD_2`
+
 **At least one AI provider**
 - `GROQ_API_KEY` — Groq; defaults to `openai/gpt-oss-120b`
 - `GEMINI_API_KEY` — Google Gemini; defaults to `gemini-3.8-flash`
@@ -50,7 +54,9 @@ Set these in Railway's service Variables (or in a local `.env` file):
 
 Optional model overrides: `GROQ_MODEL`, `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`. The defaults are documented in `.env.example`.
 
-Use a long, unique value for `APP_PASSWORD`. Never commit `.env`, API keys, or the Supabase service-role key.
+Set both `APP_USERNAME_2` and `APP_PASSWORD_2` in Railway Variables to enable the second login. Keep the usernames distinct and use a separate long, unique password for each account. Never commit `.env`, passwords, API keys, or the Supabase service-role key.
+
+For named audit rows in an existing Supabase database, run `migration_add_audit_actor.sql` once in the Supabase SQL Editor. The app keeps logging the username in the existing note field until that migration is applied, so stock changes remain attributable during setup. The Stock History page shows the user, action, item, previous/new quantities, and note in one shared log.
 
 ## Run locally
 
@@ -64,7 +70,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open the local URL printed by Gradio and sign in with `APP_USERNAME` and `APP_PASSWORD`.
+Open the local URL printed by Gradio and sign in with either configured username and its matching password.
 
 ## Deploy
 
@@ -80,3 +86,4 @@ The repository's `main` branch is connected to the Railway service. Set the requ
 ## Scope
 
 The current release implements inventory, categories, custom inventory columns, low-stock tracking, stock history, and the AI assistant's inventory tools. Event bookings, quotations, costing, expenses, staff scheduling, and sales reporting are not implemented in this release.
+
