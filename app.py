@@ -1129,8 +1129,12 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 additional_inputs=[provider_selector],
                 title="💬 Ask The Liquid Affair",
                 description="Chat naturally and ask the assistant to work across your app.",
-                examples=["Show low stock", "List inventory", "Add category Syrups",
-                          "Reduce Straws by 5 in Straws"],
+                examples=[
+                    ["Show low stock", "Auto (recommended)"],
+                    ["List inventory", "Auto (recommended)"],
+                    ["Add category Syrups", "Auto (recommended)"],
+                    ["Reduce Straws by 5 in Straws", "Auto (recommended)"],
+                ],
             )
         with gr.Tab("Stock history"):
             audit_table = gr.Dataframe(
