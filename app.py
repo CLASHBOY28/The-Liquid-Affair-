@@ -107,8 +107,8 @@ def _provider_error_detail(exc):
 
     # Defensive redaction in case a provider echoes a credential-like value.
     detail = re.sub(
-        r"(?i)(api[_ -]?key|authorization|bearer)\\s*[:=]\\s*[^\\s,;]+",
-        r"\\1=[redacted]",
+        r"(?i)(api[_ -]?key|authorization|bearer)\s*[:=]\s*[^\s,;]+",
+        r"\1=[redacted]",
         detail,
     )
     return " ".join(detail.split())[:320]
