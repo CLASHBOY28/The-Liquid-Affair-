@@ -54,7 +54,7 @@ Set these in Railway's service Variables (or in a local `.env` file):
 
 Optional model overrides: `GROQ_MODEL`, `GEMINI_MODEL`, and `GEMINI_FALLBACK_MODEL`. The defaults are documented in `.env.example`.
 
-Set both `APP_USERNAME_2` and `APP_PASSWORD_2` in Railway Variables to enable the second login. Keep the usernames distinct and use a separate long, unique password for each account. Never commit `.env`, passwords, API keys, or the Supabase service-role key.
+Set both `APP_USERNAME_2` and `APP_PASSWORD_2` in Railway Variables to enable the second login. The app also accepts the older Railway names `APP_USERNAME2` and `APP_PASSWORD2`. Keep the usernames distinct and use a separate long, unique password for each account. A partially configured pair is ignored if another complete pair exists; at least one complete pair is always required. Never commit `.env`, passwords, API keys, or the Supabase service-role key.
 
 For named audit rows in an existing Supabase database, run `migration_add_audit_actor.sql` once in the Supabase SQL Editor. The app keeps logging the username in the existing note field until that migration is applied, so stock changes remain attributable during setup. The Stock History page shows the user, action, item, previous/new quantities, and note in one shared log.
 
