@@ -203,13 +203,18 @@ def suggest_category_for_item(item_name: str):
         return best_category
 
     # Keyword groups are applied only when the corresponding category already exists.
+    def compact(value):
+        return "".join(re.findall(r"[a-z0-9]+", (value or "").lower()))
+
+    # Match category names using normalized aliases, regardless of spaces,
+    # ampersands, or singular/plural wording.
     category_aliases = {
         "juice": {"juice", "juices"},
-        "use & throw": {"useandthrow", "usethrow", "disposable", "disposables"},
+        "use & throw": {"useandthrow", "usethrow", "usethrowaway", "disposable", "disposables"},
     }
     keyword_groups = {
         "juice": {
-            "juice", "mango", "pineapple", "orange", "apple", "grape",
+            "juice", "juices", "mango", "pineapple", "orange", "apple", "grape",
             "watermelon", "cranberry", "lychee", "passionfruit", "guava",
             "pomegranate", "mosambi", "lemon", "lime", "fruit",
         },
@@ -219,22 +224,27 @@ def suggest_category_for_item(item_name: str):
             "plates", "spoon", "spoons", "fork", "forks", "garbage", "bin",
         },
     }
-    normalized_categories = {}
-    for category in categories:
-        category_name = category["name"]
-        compact = "".join(words(category_name))
-        normalized_categories[compact] = category_name
-        normalized_categories[category_name.strip().lower()] = category_name
+    normalized_categories = {
+        compact(category["name"]): category["name"] for category in categories
+    }
 
     matches = []
     item_words = words(name)
     for group, keywords in keyword_groups.items():
-        if not (item_words & keywords):
-            continue
-        for alias in category_aliases[group]:
-            if alias in normalized_categories:
-                matches.append(normalized_categories[alias])
-                break
+        if item_words & keywords:
+            for alias in category_aliases[group]:
+                if alias in normalized_categories:
+                    matches.append(normalized_categories[alias])
+                    break
+
+    # If a category's own meaningful name appears in the item name, use it.
+    # This supports any categories the user adds later without editing code.
+    generic_words = {"and", "the", "for", "of", "item", "items"}
+    for category in categories:
+        category_words = words(category["name"]) - generic_words
+        if category_words and category_words.issubset(item_words):
+            matches.append(category["name"])
+
     matches = list(dict.fromkeys(matches))
     return matches[0] if len(matches) == 1 else ""
 
@@ -720,8 +730,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
                 item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
+                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
             item_name.input(fn=suggest_category_ui, inputs=item_name, outputs=item_category)
-                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Choose an existing category or type a new one.")
             with gr.Row():
                 item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
                 item_unit = gr.Textbox(label="Unit", value="bottles")
