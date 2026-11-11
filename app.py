@@ -519,7 +519,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "add_or_update_item",
      "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Do not ask for category when the item already exists.",
      "parameters": {"type": "object", "properties": {
-         "name": {"type": "string"}, "category": {"type": "string"},
+         "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. For existing items, omit this and use the saved category."},
          "quantity": {"type": "integer", "minimum": 0},
          "reorder_threshold": {"type": "integer", "minimum": 0},
          "unit": {"type": "string"},
@@ -720,16 +720,17 @@ def _quick_inventory_reply(user_text):
         except Exception as exc:
             return f"Could not add category '{category_name}': {exc}"
 
-    # Explicit stock adjustment: "Reduce Straws by 5 in Straws".
+    # Stock adjustment with or without a category:
+    # "Reduce Straws by 5" / "Reduce Straws by 5 in Disposables".
     match = re.fullmatch(
-        r"(reduce|decrease|subtract|deduct|increase|add)\s+(.+?)\s+by\s+(\d+)\s+in\s+(.+)",
+        r"(reduce|decrease|subtract|deduct|increase|add)\\s+(.+?)\\s+by\\s+(\\d+)(?:\\s+in\\s+(.+))?",
         raw, flags=re.IGNORECASE
     )
     if match:
         verb, item_name, amount, category = match.groups()
         delta = int(amount) * (-1 if verb.lower() in ("reduce", "decrease", "subtract", "deduct") else 1)
         try:
-            return adjust_item(item_name.strip(), category.strip(), delta)
+            return adjust_item(item_name.strip(), category.strip() if category else None, delta)
         except Exception as exc:
             return f"Stock was not changed: {exc}"
 
