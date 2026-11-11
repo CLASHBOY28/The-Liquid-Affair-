@@ -1071,6 +1071,14 @@ def brand_header():
 
 APP_CSS = """
 :root { color-scheme: dark; }
+.tla-app-shell { width:100% !important; min-width:0 !important; gap:12px !important; }
+.tla-mobile-nav { display:flex !important; flex-flow:row nowrap !important; align-items:stretch !important; gap:6px !important; width:100% !important; min-width:0 !important; }
+.tla-nav-button { flex:1 1 0 !important; min-width:0 !important; width:0 !important; padding:9px 3px !important; font-size:clamp(9px,2.65vw,13px) !important; line-height:1.15 !important; white-space:normal !important; overflow-wrap:anywhere !important; }
+.tla-page { width:100% !important; min-width:0 !important; }
+@media(max-width:760px) {
+  .tla-mobile-nav { display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; gap:5px !important; }
+  .tla-nav-button { min-height:48px !important; padding:8px 2px !important; font-size:clamp(9px,2.7vw,12px) !important; }
+}
 html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 .gradio-container { width:100% !important; max-width:1440px !important; margin:0 auto !important; padding:clamp(12px,2vw,28px) !important; box-sizing:border-box !important; background:var(--tla-bg,#090812) !important; }
 .gradio-container .block, .gradio-container .tabitem, .gradio-container .panel { min-width:0 !important; border-radius:16px !important; }
@@ -1319,8 +1327,14 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     theme_selector.change(fn=theme_css, inputs=theme_selector, outputs=theme_styles)
     gr.Markdown("### Your bar, your stock — all in one place")
     gr.Markdown("Manage inventory, stock levels and expiry dates from one place.", elem_classes=["tla-subtitle"])
-    with gr.Tabs():
-        with gr.Tab("Dashboard"):
+    with gr.Column(elem_classes=["tla-app-shell"]):
+        with gr.Row(elem_classes=["tla-mobile-nav"]):
+            nav_dashboard = gr.Button("Dashboard", variant="primary", elem_classes=["tla-nav-button"])
+            nav_inventory = gr.Button("Inventory", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_categories = gr.Button("Categories", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_ai = gr.Button("AI Assistant", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_history = gr.Button("Stock History", variant="secondary", elem_classes=["tla-nav-button"])
+        with gr.Column(visible=True, elem_classes=["tla-page"]) as dashboard_page:
             summary = gr.Markdown()
             refresh_button = gr.Button("Refresh dashboard")
             gr.Markdown("#### Low-stock items")
@@ -1329,7 +1343,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 interactive=False, wrap=False, elem_classes=["desktop-only"]
             )
             low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
-        with gr.Tab("Inventory"):
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as inventory_page:
             gr.Markdown("#### Add item or set its exact stock")
             with gr.Row():
                 item_name = gr.Textbox(label="Item name", placeholder="Mango Juice")
@@ -1363,7 +1377,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             gr.Markdown("Use the forms above to edit items and stock. The full editable table is available on larger screens.", elem_classes=["desktop-only"])
             save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
             table_status = gr.Markdown(elem_classes=["desktop-only"])
-        with gr.Tab("Categories"):
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as categories_page:
             gr.Markdown("### Manage categories")
             category_name = gr.Textbox(label="New category", placeholder="Juices, Syrups, Glassware...")
             category_button = gr.Button("Add category", variant="primary")
@@ -1380,7 +1394,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 move_direction = gr.Radio(choices=["up", "down"], value="up", label="Move")
                 move_field_button = gr.Button("Move column")
                 remove_field_button = gr.Button("Remove column", variant="stop")
-        with gr.Tab("AI assistant"):
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as ai_page:
             with gr.Row(equal_height=True):
                 gr.Markdown("### 🤖 AI Assistant", scale=2)
                 provider_selector = gr.Dropdown(
@@ -1408,12 +1422,28 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     ["Reduce Straws by 5 in Straws", "Auto (recommended)"],
                 ],
             )
-        with gr.Tab("Stock history"):
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as history_page:
             audit_table = gr.Dataframe(
                 headers=["Date", "Item", "Action", "Old quantity", "New quantity", "Note"],
                 interactive=False, wrap=True, elem_classes=["desktop-only"]
             )
             audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
+
+    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page]
+    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history]
+
+    def select_page(selected):
+        names = ["Dashboard", "Inventory", "Categories", "AI Assistant", "Stock History"]
+        visibility = [gr.update(visible=(index == selected)) for index in range(5)]
+        styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(5)]
+        return visibility + styles
+
+    for index, nav_button in enumerate(page_buttons):
+        nav_button.click(
+            fn=lambda index=index: select_page(index),
+            outputs=page_columns + page_buttons,
+            queue=False,
+        )
 
     refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
     demo.load(refresh_all, outputs=refresh_outputs)
