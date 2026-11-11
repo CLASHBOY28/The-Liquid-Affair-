@@ -1301,6 +1301,71 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
     background:transparent !important;
   }
 }
+
+/* Mobile: keep the five primary sections visible together; no overflow menu. */
+@media (max-width: 760px) {
+  .gradio-container .tab-nav,
+  .gradio-container [role="tablist"] {
+    display:grid !important;
+    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
+    grid-auto-flow:column !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    justify-content:stretch !important;
+    gap:2px !important;
+    width:100% !important;
+    max-width:100% !important;
+    overflow:visible !important;
+    white-space:normal !important;
+    padding:4px 0 8px !important;
+    margin:0 0 10px !important;
+    box-sizing:border-box !important;
+  }
+  /* Gradio's final nav child is its overflow/three-dot menu control. */
+  .gradio-container .tab-nav > button:last-child:not([role="tab"]),
+  .gradio-container [role="tablist"] > button:last-child:not([role="tab"]) {
+    display:none !important;
+  }
+  .gradio-container .tab-nav button[role="tab"],
+  .gradio-container [role="tablist"] button[role="tab"],
+  .gradio-container button[role="tab"] {
+    display:flex !important;
+    visibility:visible !important;
+    opacity:1 !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    flex:none !important;
+    justify-content:center !important;
+    align-items:center !important;
+    min-height:48px !important;
+    height:auto !important;
+    padding:7px 2px !important;
+    margin:0 !important;
+    border-radius:9px 9px 0 0 !important;
+    background:transparent !important;
+    font-size:clamp(9px,2.8vw,12px) !important;
+    line-height:1.15 !important;
+    font-weight:700 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    text-align:center !important;
+    box-sizing:border-box !important;
+  }
+  .gradio-container .tab-nav button[aria-selected="true"],
+  .gradio-container [role="tablist"] button[aria-selected="true"] {
+    color:#f39a52 !important;
+    border-bottom:2px solid #f39a52 !important;
+  }
+}
+@media (max-width: 380px) {
+  .gradio-container .tab-nav button[role="tab"],
+  .gradio-container [role="tablist"] button[role="tab"] {
+    font-size:9px !important;
+    padding-left:1px !important;
+    padding-right:1px !important;
+  }
+}
 """
 
 
