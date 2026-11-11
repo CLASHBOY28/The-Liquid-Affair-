@@ -1082,7 +1082,7 @@ html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
   .gradio-container .row > *, .gradio-container .row > .form, .gradio-container .row > .container {width:100% !important; min-width:0 !important; flex:1 1 auto !important;}
   /* Gradio 6 may collapse the tab labels into an ellipsis menu on narrow screens.
      Force the real tab buttons to remain visible in a two-row, touch-friendly grid. */
-  .gradio-container .tabs, .gradio-container [role="tablist"], .gradio-container .tab-nav {
+  .gradio-container [role="tablist"], .gradio-container .tab-nav {
     display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
     align-items:stretch !important; justify-content:flex-start !important;
     gap:6px !important; width:100% !important; max-width:100% !important;
