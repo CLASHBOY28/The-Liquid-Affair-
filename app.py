@@ -886,7 +886,7 @@ html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
 """
 
 
-with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
+with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     theme_styles = gr.HTML(theme_css("Neon Lounge"))
     gr.HTML(brand_header())
     with gr.Row():
@@ -934,8 +934,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory", css=APP_CSS) as demo:
             )
             inventory_mobile = gr.HTML(value=mobile_inventory_cards(), elem_classes=["mobile-only"])
             gr.Markdown("On a phone, use the item and stock forms above to make changes. The full editable table is available on larger screens.")
-            save_table_button = gr.Button("Save table changes", variant="primary")
-            table_status = gr.Markdown()
+            save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
+            table_status = gr.Markdown(elem_classes=["desktop-only"])
             gr.Markdown("#### Customize your columns")
             gr.Markdown("Add fields such as Brand, Supplier, Bottle size, Storage location, Batch number, or Notes. Move or remove custom columns whenever you need.")
             with gr.Row():
@@ -1008,4 +1008,5 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=int(os.getenv("PORT", "7860")),
         auth=(APP_USERNAME, APP_PASSWORD),
+        css=APP_CSS,
     )
