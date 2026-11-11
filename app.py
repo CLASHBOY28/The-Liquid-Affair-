@@ -1109,26 +1109,26 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False, elem_classes=["desktop-only"])
             category_mobile = gr.HTML(value=mobile_category_cards(), elem_classes=["mobile-only"])
         with gr.Tab("AI assistant"):
-            gr.Markdown("### Choose your AI engine")
-            provider_selector = gr.Dropdown(
-                choices=[
-                    "Auto (recommended)",
-                    "Groq",
-                    "Gemini",
-                    "Cloudflare Workers AI",
-                ],
-                value="Auto (recommended)",
-                label="AI provider",
-                info="Auto tries your configured providers. Selecting a provider uses that engine directly.",
-            )
-            provider_status = gr.Markdown(
-                "Configured providers are selected at runtime from Railway environment variables."
-            )
+            with gr.Row(equal_height=True):
+                gr.Markdown("### 🤖 AI Assistant", scale=2)
+                provider_selector = gr.Dropdown(
+                    choices=[
+                        "Auto (recommended)",
+                        "Groq",
+                        "Gemini",
+                        "Cloudflare Workers AI",
+                    ],
+                    value="Auto (recommended)",
+                    label="⚙️ AI Engine",
+                    info="Choose which AI provider powers this chat.",
+                    scale=2,
+                    min_width=190,
+                )
             gr.ChatInterface(
                 fn=chat_fn,
                 additional_inputs=[provider_selector],
-                title="Ask The Liquid Affair",
-                description="Choose an AI engine above, then ask it to work across the app.",
+                title="💬 Ask The Liquid Affair",
+                description="Chat naturally and ask the assistant to work across your app.",
                 examples=["Show low stock", "List inventory", "Add category Syrups",
                           "Reduce Straws by 5 in Straws"],
             )
