@@ -1140,6 +1140,99 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
   .gradio-container footer { padding-bottom:env(safe-area-inset-bottom) !important; }
 }
 @media(max-width:390px) { .gradio-container { padding-left:9px !important; padding-right:9px !important; } .tla-kpi { padding:10px !important; } .tla-kpi strong { font-size:20px !important; } }
+
+/* Android layout correction: full-width controls, no cramped 145px columns. */
+
+@media (max-width: 760px) {
+  html, body { width:100% !important; min-width:320px !important; overflow-x:hidden !important; }
+  .gradio-container {
+    width:100% !important; max-width:100% !important;
+    padding:12px 14px calc(24px + env(safe-area-inset-bottom)) !important;
+    margin:0 !important; gap:14px !important; box-sizing:border-box !important;
+  }
+  /* Every form row becomes a clean vertical stack. Avoid narrow side-by-side fields. */
+  .gradio-container .row {
+    display:flex !important; flex-direction:column !important; flex-wrap:nowrap !important;
+    align-items:stretch !important; gap:12px !important; width:100% !important;
+    min-width:0 !important; margin-left:0 !important; margin-right:0 !important;
+  }
+  .gradio-container .row > *,
+  .gradio-container .row > .form,
+  .gradio-container .row > .container,
+  .gradio-container .row > .column {
+    display:block !important; flex:0 0 auto !important;
+    width:100% !important; min-width:0 !important; max-width:100% !important;
+    box-sizing:border-box !important;
+  }
+  .gradio-container .row .wrap,
+  .gradio-container .row .container,
+  .gradio-container .row .form,
+  .gradio-container .row .block {
+    min-width:0 !important; max-width:100% !important;
+    box-sizing:border-box !important;
+  }
+  /* Preserve the real sections in one horizontally scrollable nav strip. */
+  .gradio-container .tab-nav,
+  .gradio-container [role="tablist"] {
+    display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important;
+    justify-content:flex-start !important; align-items:center !important; gap:8px !important;
+    width:100% !important; max-width:100% !important; height:auto !important;
+    overflow-x:auto !important; overflow-y:hidden !important; white-space:nowrap !important;
+    padding:4px 2px 12px !important; margin:0 0 12px !important;
+    scrollbar-width:none !important; -webkit-overflow-scrolling:touch !important;
+  }
+  .gradio-container .tab-nav::-webkit-scrollbar,
+  .gradio-container [role="tablist"]::-webkit-scrollbar { display:none !important; }
+  .gradio-container .tab-nav button,
+  .gradio-container [role="tablist"] button,
+  .gradio-container button[role="tab"] {
+    display:inline-flex !important; flex:0 0 auto !important;
+    width:auto !important; min-width:max-content !important; max-width:none !important;
+    min-height:44px !important; padding:10px 15px !important;
+    font-size:13px !important; white-space:nowrap !important;
+  }
+  .tla-header { width:100% !important; gap:12px !important; padding:14px !important; margin:0 0 12px !important; }
+  .tla-logo { width:64px !important; height:64px !important; }
+  .tla-brand { min-width:0 !important; }
+  .tla-brand h1 { font-size:clamp(19px,5.5vw,25px) !important; letter-spacing:1px !important; overflow-wrap:anywhere !important; }
+  .tla-brand p { font-size:8px !important; letter-spacing:1.1px !important; }
+  .gradio-container .block { width:100% !important; min-width:0 !important; padding:13px !important; border-radius:15px !important; }
+  .gradio-container label { font-size:13px !important; line-height:1.25 !important; }
+  .gradio-container input,
+  .gradio-container textarea,
+  .gradio-container select,
+  .gradio-container [role="combobox"] {
+    width:100% !important; min-width:0 !important; max-width:100% !important;
+    min-height:48px !important; font-size:16px !important; box-sizing:border-box !important;
+  }
+  .gradio-container .wrap,
+  .gradio-container .form,
+  .gradio-container .container { min-width:0 !important; max-width:100% !important; }
+  .gradio-container button { min-height:46px !important; }
+  .gradio-container .primary,
+  .gradio-container .stop { width:100% !important; }
+  .gradio-container .tabitem { padding:12px 4px !important; min-width:0 !important; }
+  .mobile-only { display:block !important; width:100% !important; min-width:0 !important; }
+  .desktop-only { display:none !important; }
+  .tla-mobile-card-list { display:grid !important; grid-template-columns:minmax(0,1fr) !important; gap:10px !important; width:100% !important; }
+  .tla-mobile-card { width:100% !important; min-width:0 !important; padding:14px !important; box-sizing:border-box !important; }
+  .tla-card-metrics { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:9px !important; }
+  .tla-card-metrics div { min-width:0 !important; }
+  .tla-card-metrics strong { font-size:15px !important; overflow-wrap:anywhere !important; }
+  .tla-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:9px !important; }
+  .tla-kpi { min-width:0 !important; padding:12px !important; }
+  .tla-kpi strong { font-size:22px !important; }
+  .gradio-container .chatbot { height:min(62vh,620px) !important; min-height:360px !important; }
+  .gradio-container .message-wrap { font-size:15px !important; }
+  .gradio-container footer { padding-bottom:env(safe-area-inset-bottom) !important; }
+}
+@media (max-width: 390px) {
+  .gradio-container { padding-left:10px !important; padding-right:10px !important; }
+  .tla-header { padding:11px !important; }
+  .tla-logo { width:56px !important; height:56px !important; }
+  .tla-kpi { padding:10px !important; }
+  .tla-kpi strong { font-size:20px !important; }
+}
 """
 
 
@@ -1190,12 +1283,12 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             adjust_button = gr.Button("Adjust stock")
             adjust_status = gr.Markdown()
             gr.Markdown("#### All inventory")
-            gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.")
+            gr.Markdown("Edit quantities, expiry dates, and custom values directly in the table, then save.", elem_classes=["desktop-only"])
             inventory_table = gr.Dataframe(
                 headers=inventory_headers(), interactive=True, wrap=False, elem_classes=["desktop-only"]
             )
             inventory_mobile = gr.HTML(value=mobile_inventory_cards(), elem_classes=["mobile-only"])
-            gr.Markdown("On a phone, use the item and stock forms above to make changes. The full editable table is available on larger screens.")
+            gr.Markdown("Use the forms above to edit items and stock. The full editable table is available on larger screens.", elem_classes=["desktop-only"])
             save_table_button = gr.Button("Save table changes", variant="primary", elem_classes=["desktop-only"])
             table_status = gr.Markdown(elem_classes=["desktop-only"])
             gr.Markdown("#### Customize your columns")
