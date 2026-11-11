@@ -501,15 +501,15 @@ def dashboard_summary():
     low = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
     units = len(records)
     total = sum(r["quantity"] for r in records)
+    category_count = len(categories_list())
     return (
-        f"### Inventory overview\n"
-        f"- **Items:** {units}\n"
-        f"- **Total units (mixed units):** {total}\n"
-        f"- **Low-stock alerts:** {len(low)}\n"
-        f"- **Categories:** {len(categories_list())}\n\n"
-        f"Low-stock count includes items at or below their reorder threshold."
+        '<div class="tla-kpi-grid">'
+        '<div class="tla-kpi"><span>Inventory items</span><strong>' + str(units) + '</strong></div>'
+        '<div class="tla-kpi"><span>Total units</span><strong>' + str(total) + '</strong></div>'
+        '<div class="tla-kpi"><span>Low-stock alerts</span><strong>' + str(len(low)) + '</strong></div>'
+        '<div class="tla-kpi"><span>Categories</span><strong>' + str(category_count) + '</strong></div>'
+        '</div><p class="tla-kpi-note">Low-stock alerts include items at or below their reorder threshold.</p>'
     )
-
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_or_update_item",
@@ -1042,96 +1042,75 @@ def brand_header():
 
 
 APP_CSS = """
-:root {color-scheme: dark;}
-html, body {width:100%; min-width:320px; margin:0; overflow-x:hidden;}
-.gradio-container {max-width:1400px !important; width:100% !important; margin:0 auto !important; padding:clamp(8px,2vw,22px) !important; box-sizing:border-box !important;}
-.tla-header {margin-bottom:16px !important;}
-.gradio-container .tab-nav {display:flex !important; gap:6px !important; flex-wrap:wrap !important;}
-.gradio-container .tab-nav button {font-weight:700 !important; padding:12px 18px !important; min-height:44px !important; border-radius:12px !important;}
-.gradio-container .block {border-radius:14px !important; min-width:0 !important;}
-.gradio-container input, .gradio-container textarea, .gradio-container select {border-radius:11px !important; min-height:44px !important; font-size:16px !important;}
-.gradio-container button {border-radius:11px !important; font-weight:700 !important; min-height:44px !important; touch-action:manipulation;}
-.gradio-container .row {min-width:0 !important;}
-.gradio-container .column {min-width:0 !important;}
-.gradio-container .table-wrap, .gradio-container .table-container, .gradio-container .dataframe-container {display:block !important; max-width:100% !important; overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;}
-.gradio-container .table-wrap table, .gradio-container .table-container table, .gradio-container .dataframe-container table {min-width:900px !important; width:max-content !important; table-layout:auto !important;}
-.gradio-container .table-wrap th, .gradio-container .table-wrap td, .gradio-container .table-container th, .gradio-container .table-container td, .gradio-container .dataframe-container th, .gradio-container .dataframe-container td {white-space:nowrap !important; min-width:84px !important; padding:10px 12px !important;}
-.mobile-only {display:none !important;}
-.tla-mobile-card-list {display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; width:100%;}
-.tla-mobile-card {background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018)); border:1px solid color-mix(in srgb,var(--tla-gold,#d8b66a) 35%,transparent); border-radius:16px; padding:15px; min-width:0; box-shadow:0 8px 22px rgba(0,0,0,.12);}
-.tla-card-top {display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
-.tla-card-top h3 {font-size:16px; margin:0 0 4px; overflow-wrap:anywhere;}
-.tla-card-top p,.tla-card-foot {font-size:12px; opacity:.75; margin:0;}
-.tla-stock-pill {font-size:11px; font-weight:800; border-radius:999px; padding:6px 9px; white-space:nowrap;}
-.tla-stock-pill.low {background:rgba(255,91,91,.16); color:#ff9696;}
-.tla-stock-pill.ok {background:rgba(57,205,143,.14); color:#76e6b1;}
-.tla-card-metrics {display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0 10px;}
-.tla-card-metrics div {background:rgba(0,0,0,.13); border-radius:11px; padding:9px;}
-.tla-card-metrics small {display:block; opacity:.7; font-size:11px; margin-bottom:4px;}
-.tla-card-metrics strong {font-size:16px; overflow-wrap:anywhere;}
-.tla-card-foot {padding-top:8px; border-top:1px solid rgba(255,255,255,.08); overflow-wrap:anywhere;}
-.tla-audit-date {font-size:10px; opacity:.72; text-align:right; max-width:110px;}
-.mobile-empty {padding:18px; border:1px dashed rgba(255,255,255,.22); border-radius:14px; opacity:.72; text-align:center;}
-.tla-category-card {padding:17px;}
-@media(max-width:700px) {
-  html, body {font-size:16px !important; width:100% !important; min-width:320px !important;}
-  body {overflow-x:hidden !important;}
-  .gradio-container {padding:6px 8px calc(18px + env(safe-area-inset-bottom)) !important; gap:10px !important;}
-  /* Keep form rows readable on phones without stretching every nested control. */
-  .gradio-container .row {flex-direction:column !important; flex-wrap:nowrap !important; gap:9px !important; min-width:0 !important;}
-  .gradio-container .row > *, .gradio-container .row > .form, .gradio-container .row > .container {width:100% !important; min-width:0 !important; flex:1 1 auto !important;}
-  /* Gradio 6 may collapse the tab labels into an ellipsis menu on narrow screens.
-     Force the real tab buttons to remain visible in a two-row, touch-friendly grid. */
-  .gradio-container [role="tablist"], .gradio-container .tab-nav {
-    display:flex !important; flex-direction:row !important; flex-wrap:wrap !important;
-    align-items:stretch !important; justify-content:flex-start !important;
-    gap:6px !important; width:100% !important; max-width:100% !important;
-    height:auto !important; max-height:none !important; overflow:visible !important;
-    white-space:normal !important; position:relative !important;
-    padding:6px 0 10px !important; margin:0 0 10px !important;
-    background:var(--tla-bg,#090812) !important; scrollbar-width:auto !important;
-  }
-  .gradio-container .tab-nav button, .gradio-container [role="tablist"] button,
-  .gradio-container button[role="tab"] {
-    display:inline-flex !important; visibility:visible !important; opacity:1 !important;
-    flex:1 1 calc(50% - 6px) !important; width:auto !important; min-width:0 !important;
-    max-width:calc(50% - 3px) !important; min-height:44px !important;
-    justify-content:center !important; align-items:center !important;
-    padding:9px 7px !important; margin:0 !important; font-size:12px !important;
-    line-height:1.2 !important; white-space:normal !important; text-align:center !important;
-  }
-  .gradio-container .tab-nav button[aria-label*="more"],
-  .gradio-container .tab-nav button[aria-label*="More"],
-  .gradio-container [role="tablist"] button[aria-label*="more"] {display:none !important;}
-  .tla-header {justify-content:flex-start !important; gap:10px !important; padding:12px 10px !important; border-radius:15px !important; margin-top:0 !important;}
-  .tla-logo {width:70px !important; height:70px !important;}
-  .tla-brand {min-width:0 !important;}
-  .tla-brand h1 {font-size:clamp(18px,5.5vw,25px) !important; letter-spacing:1px !important; line-height:1.15 !important;}
-  .tla-brand p {font-size:9px !important; letter-spacing:1px !important; margin-top:5px !important;}
-  .gradio-container h1 {font-size:23px !important;}
-  .gradio-container h2 {font-size:20px !important;}
-  .gradio-container h3 {font-size:17px !important;}
-  .gradio-container .block {padding:10px !important; border-radius:13px !important; min-width:0 !important;}
-  .gradio-container button {min-height:46px !important;}
-  .gradio-container input, .gradio-container textarea, .gradio-container select {font-size:16px !important; min-height:46px !important;}
-  .gradio-container .form button, .gradio-container .primary, .gradio-container .stop {width:100% !important;}
-  .desktop-only {display:none !important;}
-  .mobile-only {display:block !important; width:100% !important; min-width:0 !important;}
-  .tla-mobile-card-list {grid-template-columns:minmax(0,1fr) !important; gap:9px !important; width:100% !important;}
-  .tla-mobile-card {padding:13px !important; border-radius:15px !important;}
-  .tla-card-metrics {gap:8px !important; margin:11px 0 9px !important;}
-  .tla-card-metrics div {min-width:0 !important; padding:9px 8px !important;}
-  .tla-card-metrics strong {font-size:15px !important;}
-  .tla-stock-pill {font-size:10px !important; padding:5px 8px !important;}
-  .gradio-container .chatbot {height:min(58vh,560px) !important; min-height:340px !important;}
-  .gradio-container .message-wrap {font-size:15px !important;}
-  .gradio-container footer {padding-bottom:env(safe-area-inset-bottom) !important;}
-  /* Remove excess vertical whitespace around the first screen. */
-  .gradio-container > .wrap {padding-top:0 !important; margin-top:0 !important;}
+:root { color-scheme: dark; }
+html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
+.gradio-container { width:100% !important; max-width:1440px !important; margin:0 auto !important; padding:clamp(12px,2vw,28px) !important; box-sizing:border-box !important; background:var(--tla-bg,#090812) !important; }
+.gradio-container .block, .gradio-container .tabitem, .gradio-container .panel { min-width:0 !important; border-radius:16px !important; }
+.gradio-container .row { min-width:0 !important; align-items:stretch !important; }
+.gradio-container .column { min-width:0 !important; }
+.gradio-container input, .gradio-container textarea, .gradio-container select { min-height:44px !important; font-size:16px !important; border-radius:11px !important; }
+.gradio-container button { min-height:44px !important; border-radius:11px !important; font-weight:650 !important; touch-action:manipulation; }
+.tla-header { display:flex !important; align-items:center !important; justify-content:flex-start !important; gap:18px !important; padding:18px 22px !important; margin:0 0 14px !important; border:1px solid color-mix(in srgb,var(--tla-gold) 35%,transparent) !important; border-radius:18px !important; background:linear-gradient(110deg,color-mix(in srgb,var(--tla-panel) 95%,transparent),var(--tla-bg)) !important; box-shadow:0 8px 26px rgba(0,0,0,.16) !important; }
+.tla-logo { width:86px !important; height:86px !important; flex:none !important; }
+.tla-brand h1 { margin:0 !important; font-size:clamp(23px,3vw,34px) !important; letter-spacing:1.5px !important; line-height:1.15 !important; }
+.tla-brand p { margin:6px 0 0 !important; font-size:10px !important; letter-spacing:2.2px !important; opacity:.78 !important; }
+.tla-mobile-card-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr)); gap:12px; width:100%; }
+.tla-mobile-card { min-width:0; padding:16px; border-radius:15px; background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.018)); border:1px solid color-mix(in srgb,var(--tla-gold,#d8b66a) 28%,transparent); box-shadow:0 5px 18px rgba(0,0,0,.12); }
+.tla-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.tla-card-top h3 { font-size:16px; line-height:1.25; margin:0 0 4px; overflow-wrap:anywhere; }
+.tla-card-top p,.tla-card-foot { font-size:12px; opacity:.72; margin:0; }
+.tla-stock-pill { font-size:11px; font-weight:750; border-radius:999px; padding:6px 10px; white-space:nowrap; }
+.tla-stock-pill.low { background:rgba(255,91,91,.15); color:#ff9b9b; }
+.tla-stock-pill.ok { background:rgba(57,205,143,.13); color:#80e8b8; }
+.tla-card-metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:13px 0 10px; }
+.tla-card-metrics div { min-width:0; background:rgba(0,0,0,.16); border-radius:11px; padding:10px; }
+.tla-card-metrics small { display:block; opacity:.68; font-size:11px; margin-bottom:4px; }
+.tla-card-metrics strong { font-size:16px; overflow-wrap:anywhere; }
+.tla-card-foot { padding-top:9px; border-top:1px solid rgba(255,255,255,.08); overflow-wrap:anywhere; }
+.tla-audit-date { font-size:10px; opacity:.7; text-align:right; max-width:120px; }
+.mobile-empty { padding:20px; border:1px dashed rgba(255,255,255,.2); border-radius:14px; opacity:.7; text-align:center; }
+.tla-category-card { padding:16px; }
+.tla-kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:10px 0 8px; }
+.tla-kpi { min-width:0; padding:15px; border-radius:14px; background:color-mix(in srgb,var(--tla-panel) 90%,#fff 3%); border:1px solid color-mix(in srgb,var(--tla-gold) 25%,transparent); }
+.tla-kpi span { display:block; font-size:12px; opacity:.72; margin-bottom:7px; }
+.tla-kpi strong { display:block; font-size:clamp(20px,2vw,27px); color:var(--tla-gold); line-height:1.1; overflow-wrap:anywhere; }
+.tla-kpi-note { font-size:12px; opacity:.68; margin:8px 2px 0; }
+@media(max-width:760px) {
+  html, body { width:100% !important; min-width:320px !important; overflow-x:hidden !important; }
+  .gradio-container { padding:10px 12px calc(22px + env(safe-area-inset-bottom)) !important; gap:12px !important; }
+  .gradio-container .row { flex-direction:row !important; flex-wrap:wrap !important; gap:10px !important; min-width:0 !important; }
+  .gradio-container .row > * { min-width:min(100%,145px) !important; flex:1 1 145px !important; }
+  .gradio-container .tab-nav, .gradio-container [role="tablist"] { display:flex !important; flex-direction:row !important; flex-wrap:nowrap !important; align-items:center !important; justify-content:flex-start !important; gap:7px !important; width:100% !important; max-width:100% !important; height:auto !important; overflow-x:auto !important; overflow-y:hidden !important; white-space:nowrap !important; padding:5px 2px 11px !important; margin:0 0 10px !important; scrollbar-width:none !important; -webkit-overflow-scrolling:touch !important; background:var(--tla-bg,#090812) !important; }
+  .gradio-container .tab-nav::-webkit-scrollbar, .gradio-container [role="tablist"]::-webkit-scrollbar { display:none !important; }
+  .gradio-container .tab-nav button, .gradio-container [role="tablist"] button, .gradio-container button[role="tab"] { display:inline-flex !important; visibility:visible !important; opacity:1 !important; flex:0 0 auto !important; width:auto !important; max-width:none !important; min-width:max-content !important; min-height:43px !important; padding:10px 14px !important; margin:0 !important; font-size:13px !important; line-height:1.15 !important; white-space:nowrap !important; }
+  .gradio-container .tab-nav button[aria-label*="more"], .gradio-container .tab-nav button[aria-label*="More"], .gradio-container [role="tablist"] button[aria-label*="more"] { display:none !important; }
+  .tla-header { gap:12px !important; padding:12px 14px !important; margin-bottom:10px !important; border-radius:15px !important; }
+  .tla-logo { width:62px !important; height:62px !important; }
+  .tla-brand h1 { font-size:clamp(18px,5.2vw,24px) !important; letter-spacing:1px !important; }
+  .tla-brand p { font-size:8px !important; letter-spacing:1.2px !important; margin-top:4px !important; }
+  .gradio-container h1 { font-size:23px !important; }
+  .gradio-container h2 { font-size:20px !important; }
+  .gradio-container h3 { font-size:17px !important; }
+  .gradio-container .block { padding:12px !important; border-radius:14px !important; }
+  .gradio-container button { min-height:44px !important; }
+  .gradio-container input, .gradio-container textarea, .gradio-container select { min-height:44px !important; font-size:16px !important; }
+  .gradio-container .tabitem { padding:12px !important; }
+  .desktop-only { display:none !important; }
+  .mobile-only { display:block !important; width:100% !important; min-width:0 !important; }
+  .tla-mobile-card-list { grid-template-columns:minmax(0,1fr) !important; gap:10px !important; }
+  .tla-mobile-card { padding:14px !important; }
+  .tla-card-metrics { gap:8px !important; margin:11px 0 9px !important; }
+  .tla-card-metrics div { padding:9px 8px !important; }
+  .tla-card-metrics strong { font-size:15px !important; }
+  .tla-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)) !important; gap:8px !important; }
+  .tla-kpi { padding:12px !important; }
+  .tla-kpi span { font-size:11px !important; }
+  .tla-kpi strong { font-size:22px !important; }
+  .gradio-container .chatbot { height:min(62vh,620px) !important; min-height:360px !important; }
+  .gradio-container .message-wrap { font-size:15px !important; }
+  .gradio-container footer { padding-bottom:env(safe-area-inset-bottom) !important; }
 }
-@media(min-width:701px) {
-  .gradio-container .tab-nav {position:relative;}
-}
+@media(max-width:390px) { .gradio-container { padding-left:9px !important; padding-right:9px !important; } .tla-kpi { padding:10px !important; } .tla-kpi strong { font-size:20px !important; } }
 """
 
 
@@ -1145,7 +1124,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         )
     theme_selector.change(fn=theme_css, inputs=theme_selector, outputs=theme_styles)
     gr.Markdown("### Your bar, your stock — all in one place")
-    gr.Markdown("Add products, track expiry dates, customize columns, and keep stock levels up to date.")
+    gr.Markdown("Manage inventory, stock levels and expiry dates from one place.", elem_classes=["tla-subtitle"])
     with gr.Tabs():
         with gr.Tab("Dashboard"):
             summary = gr.Markdown()
