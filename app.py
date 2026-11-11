@@ -828,7 +828,7 @@ def chat_fn(message, history, provider="Auto (recommended)"):
     if quick_reply is not None:
         return quick_reply
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT + "\\n\\n" + current_india_time_context()}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + "\n\n" + current_india_time_context()}]
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": user_text})
 
