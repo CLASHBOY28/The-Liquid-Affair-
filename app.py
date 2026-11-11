@@ -73,25 +73,59 @@ def gemini_chat_completion(**kwargs):
     raise last_error
 
 
-def ai_chat_completion(**kwargs):
-    """Try Groq first when configured, then Cloudflare, then Gemini."""
-    if groq_client is not None:
+def ai_chat_completion(provider="Auto (recommended)", **kwargs):
+    """Route requests to the provider selected in the AI assistant dropdown."""
+    request = dict(kwargs)
+    request.pop("model", None)
+
+    def call_groq():
+        if groq_client is None:
+            raise RuntimeError("Groq is not configured. Add GROQ_API_KEY in Railway Variables.")
+        payload = dict(request)
+        payload["model"] = GROQ_MODEL
+        return groq_client.chat.completions.create(**payload)
+
+    def call_gemini():
+        if gemini_client is None:
+            raise RuntimeError("Gemini is not configured. Add GEMINI_API_KEY in Railway Variables.")
+        payload = dict(request)
+        payload["model"] = MODEL
+        return gemini_chat_completion(**payload)
+
+    def call_cloudflare():
+        if cloudflare_client is None:
+            raise RuntimeError("Cloudflare Workers AI is not configured. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in Railway Variables.")
+        payload = dict(request)
+        payload["model"] = CLOUDFLARE_MODEL
+        return cloudflare_client.chat.completions.create(**payload)
+
+    selected = (provider or "Auto (recommended)").strip()
+    routes = {
+        "Groq": call_groq,
+        "Gemini": call_gemini,
+        "Cloudflare Workers AI": call_cloudflare,
+    }
+    if selected in routes:
+        return routes[selected]()
+
+    # Auto mode tries only providers that have credentials configured.
+    errors = []
+    for name, fn, configured in (
+        ("Groq", call_groq, groq_client is not None),
+        ("Cloudflare Workers AI", call_cloudflare, cloudflare_client is not None),
+        ("Gemini", call_gemini, gemini_client is not None),
+    ):
+        if not configured:
+            continue
         try:
-            request = dict(kwargs)
-            request["model"] = GROQ_MODEL
-            return groq_client.chat.completions.create(**request)
+            return fn()
         except Exception as exc:
-            logging.exception("Groq request failed; trying next configured provider: %s", exc)
-    if cloudflare_client is not None:
-        try:
-            request = dict(kwargs)
-            request["model"] = CLOUDFLARE_MODEL
-            return cloudflare_client.chat.completions.create(**request)
-        except Exception as exc:
-            logging.exception("Cloudflare Workers AI request failed; falling back to Gemini: %s", exc)
-    gemini_request = dict(kwargs)
-    gemini_request["model"] = MODEL
-    return gemini_chat_completion(**gemini_request)
+            errors.append(f"{name}: {type(exc).__name__}")
+            logging.exception("%s failed in Auto mode", name)
+    raise RuntimeError(
+        "No configured AI provider could complete the request. "
+        + ("; ".join(errors) if errors else "Add an API key for Groq, Gemini, or Cloudflare Workers AI.")
+    )
 
 
 def category_id_for(name: str, create: bool = False):
@@ -637,8 +671,8 @@ def _object_value(value, key, default=None):
     return getattr(value, key, default)
 
 
-def chat_fn(message, history):
-    """General AI chat with bounded, multi-step inventory tool execution."""
+def chat_fn(message, history, provider="Auto (recommended)"):
+    """General AI chat with selectable provider and bounded tool execution."""
     user_text = (message or "").strip()
     if not user_text:
         return "What would you like help with?"
@@ -656,7 +690,7 @@ def chat_fn(message, history):
     for _round in range(max_tool_rounds + 1):
         try:
             response = ai_chat_completion(
-                model=CLOUDFLARE_MODEL,
+                provider=provider,
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
@@ -1075,10 +1109,26 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             category_table = gr.Dataframe(headers=["ID", "Category"], interactive=False, elem_classes=["desktop-only"])
             category_mobile = gr.HTML(value=mobile_category_cards(), elem_classes=["mobile-only"])
         with gr.Tab("AI assistant"):
+            gr.Markdown("### Choose your AI engine")
+            provider_selector = gr.Dropdown(
+                choices=[
+                    "Auto (recommended)",
+                    "Groq",
+                    "Gemini",
+                    "Cloudflare Workers AI",
+                ],
+                value="Auto (recommended)",
+                label="AI provider",
+                info="Auto tries your configured providers. Selecting a provider uses that engine directly.",
+            )
+            provider_status = gr.Markdown(
+                "Configured providers are selected at runtime from Railway environment variables."
+            )
             gr.ChatInterface(
                 fn=chat_fn,
+                additional_inputs=[provider_selector],
                 title="Ask The Liquid Affair",
-                description="Try: 'Add 24 bottles of Mango Juice under Juices' or 'Show low stock'.",
+                description="Choose an AI engine above, then ask it to work across the app.",
                 examples=["Show low stock", "List inventory", "Add category Syrups",
                           "Reduce Straws by 5 in Straws"],
             )
