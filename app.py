@@ -241,7 +241,7 @@ def find_item_by_name_and_category(name, category_id):
     return matches[0] if matches else None
 
 def inventory_headers():
-    return ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date"] + [
+    return ["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date"] + [
         field["name"] for field in custom_fields_list()
     ] + ["Updated"]
 
@@ -443,7 +443,7 @@ def inventory_item_form_defaults(item_name):
             unit_update = gr.update(value=units[0])
         else:
             unit_update = gr.update(
-                info="This item name has different units in multiple categories. Confirm the unit.",
+                info="This item name has different types in multiple categories. Confirm the type.",
             )
         return category_update, unit_update
 
@@ -487,7 +487,7 @@ def add_custom_field(name, field_type="text", actor=None):
     name = (name or "").strip()
     if not name:
         raise ValueError("Enter a column name.")
-    reserved = {h.casefold() for h in ["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"]}
+    reserved = {h.casefold() for h in ["ID", "Item", "Category", "Quantity", "Type", "Unit", "Reorder at", "Expiry date", "Updated"]}
     if name.casefold() in reserved:
         raise ValueError("That name is already used by a standard inventory column.")
     existing = [f["name"].casefold() for f in custom_fields_list()]
@@ -1193,6 +1193,7 @@ def brand_header():
 
 APP_CSS = """
 :root { color-scheme: dark; }
+.theme-style-host { display:none !important; }
 .tla-app-shell { width:100% !important; min-width:0 !important; gap:12px !important; }
 .tla-mobile-nav { display:flex !important; flex-flow:row nowrap !important; align-items:stretch !important; gap:6px !important; width:100% !important; min-width:0 !important; }
 .tla-nav-button { flex:1 1 0 !important; min-width:0 !important; width:0 !important; padding:9px 3px !important; font-size:clamp(9px,2.65vw,13px) !important; line-height:1.15 !important; white-space:normal !important; overflow-wrap:anywhere !important; }
@@ -1439,7 +1440,7 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 
 
 with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
-    theme_styles = gr.HTML(theme_css("Neon Lounge"))
+    theme_styles = gr.HTML(theme_css("Neon Lounge"), elem_classes=["theme-style-host"])
     gr.HTML(brand_header())
     with gr.Row():
         theme_selector = gr.Dropdown(
@@ -1461,7 +1462,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             refresh_button = gr.Button("Refresh dashboard")
             gr.Markdown("#### Low-stock items")
             low_table = gr.Dataframe(
-                headers=["ID", "Item", "Category", "Quantity", "Unit", "Reorder at", "Expiry date", "Updated"],
+                headers=["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date", "Updated"],
                 interactive=False, wrap=False, elem_classes=["desktop-only"]
             )
             low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
@@ -1474,9 +1475,18 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 )
                 item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
             with gr.Row():
-                item_quantity = gr.Number(label="Exact quantity", value=0, precision=0)
-                item_unit = gr.Textbox(label="Unit", value="bottles")
-                item_threshold = gr.Number(label="Reorder threshold", value=5, precision=0)
+                item_quantity = gr.Number(
+                    label="Exact quantity", value=0, precision=0,
+                    info="The total amount currently in stock for this item type.",
+                )
+                item_unit = gr.Textbox(
+                    label="Type", value="bottles",
+                    info="Enter how this item is counted, such as packs, bottles, or pieces.",
+                )
+                item_threshold = gr.Number(
+                    label="Reorder threshold", value=5, precision=0,
+                    info="Shows a low-stock alert when the quantity reaches or falls below this number.",
+                )
             item_name.change(
                 fn=inventory_item_form_defaults,
                 inputs=item_name,
@@ -1486,6 +1496,10 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             save_button = gr.Button("Save item", variant="primary")
             save_status = gr.Markdown()
             gr.Markdown("#### Adjust existing stock (+/-)")
+            gr.Markdown(
+                "Choose the item and category, then enter a positive number to add stock or a negative number to record stock used. "
+                "For example, +5 adds five and -2 removes two."
+            )
             with gr.Row():
                 adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
                 adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
@@ -1494,7 +1508,10 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     inputs=adjust_name,
                     outputs=adjust_category,
                 )
-                adjust_delta = gr.Number(label="Stock change (+/-)", precision=0)
+                adjust_delta = gr.Number(
+                    label="Stock change (+/-)", precision=0,
+                    info="Use + to add received stock and - to subtract used or lost stock.",
+                )
             adjust_button = gr.Button("Adjust stock")
             adjust_status = gr.Markdown()
             gr.Markdown("#### All inventory")
