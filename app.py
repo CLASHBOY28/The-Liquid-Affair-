@@ -455,121 +455,171 @@ def execute_tool(name: str, args: dict[str, Any]) -> str:
 
 
 def history_to_messages(history):
+    """Normalize Gradio's messages and legacy tuple history into API messages."""
     messages = []
+
+    def text_content(content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, str):
+                    parts.append(part)
+                elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                    parts.append(part["text"])
+            return "\n".join(part for part in parts if part)
+        return ""
+
     for turn in history or []:
         if isinstance(turn, dict):
-            role, content = turn.get("role"), turn.get("content")
-            if role in ("user", "assistant") and isinstance(content, str) and content:
+            role = turn.get("role")
+            content = text_content(turn.get("content"))
+            if role in ("user", "assistant") and content.strip():
                 messages.append({"role": role, "content": content})
         elif isinstance(turn, (list, tuple)) and len(turn) == 2:
-            if turn[0]:
-                messages.append({"role": "user", "content": str(turn[0])})
-            if turn[1]:
-                messages.append({"role": "assistant", "content": str(turn[1])})
-    return messages
+            user_content = text_content(turn[0])
+            assistant_content = text_content(turn[1])
+            if user_content.strip():
+                messages.append({"role": "user", "content": user_content})
+            if assistant_content.strip():
+                messages.append({"role": "assistant", "content": assistant_content})
+    return messages[-24:]
 
 
 SYSTEM_PROMPT = """
-You are the inventory assistant for The Liquid Affair, a mobile bar business.
-Use the supplied tools for every inventory lookup or change. Never invent stock values.
-'Add/set stock to N' means set the exact quantity. 'Increase/decrease by N' means adjust
-the current quantity. Ask one concise question when the item or category is ambiguous.
-Report tool errors honestly. Do not claim an operation succeeded if its tool returned ERROR.
+You are the friendly, capable AI assistant for The Liquid Affair, a mobile
+bartending and bar-operations business.
+
+CHAT LIKE A GENERAL-PURPOSE AI ASSISTANT:
+- Handle greetings, normal conversation, explanations, brainstorming, writing,
+  calculations, recipes, event planning, and general questions naturally.
+- Do not force every conversation into inventory management.
+- Understand informal wording, typos, shorthand, and follow-up messages using
+  the conversation history. Ask one clear question when essential information
+  is missing.
+- Be concise by default, but explain thoroughly when asked.
+- Never claim to have checked live information unless a tool actually checked it.
+
+INVENTORY AND BUSINESS DATA:
+- Use the supplied tools whenever the user asks to look up or change live inventory.
+- Never invent inventory quantities, categories, expiry dates, or successful writes.
+- “Add/set stock to N” means set the exact quantity to N. “Increase/decrease by N”
+  means adjust the current quantity by that amount.
+- Ask for missing or ambiguous item/category details before changing stock.
+- Explain tool results in clear, natural language. Do not expose raw JSON to the user.
+- If a tool returns an error, explain that the operation did not complete.
+- Never perform an inventory write merely because the user is discussing an item;
+  the user must clearly ask for an action.
 """
 
 
+def _chat_error_message(exc):
+    """Return a safe, useful error without exposing credentials or request headers."""
+    status = getattr(exc, "status_code", None)
+    if status == 429:
+        return "The AI service is busy or its rate limit has been reached. Please try again shortly."
+    if status in (500, 502, 503, 504):
+        return "The AI service is temporarily unavailable. Please try again in a minute."
+    if status:
+        return f"The AI request failed (HTTP {status}). Please try again; if it continues, contact the app administrator."
+    logging.exception("AI assistant request failed")
+    return "I couldn't reach the AI service just now. Please try again in a moment."
+
+
 def chat_fn(message, history):
+    """General AI chat with bounded, multi-step inventory tool execution."""
     user_text = (message or "").strip()
-    normalized = user_text.lower()
-
-    # Explicit provider diagnostic: tests Cloudflare directly and never silently falls back.
-    if normalized in ("test cloudflare", "check cloudflare", "use cloudflare", "test cloudflare ai"):
-        if cloudflare_client is None:
-            return "Cloudflare is not configured. Check CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in Railway."
-        try:
-            result = cloudflare_client.chat.completions.create(
-                model=CLOUDFLARE_MODEL,
-                messages=[{"role": "user", "content": "Reply with exactly: Cloudflare AI is connected."}],
-                max_tokens=40,
-            )
-            return "Cloudflare test successful: " + (result.choices[0].message.content or "The model responded.")
-        except Exception as exc:
-            status = getattr(exc, "status_code", None)
-            detail = str(exc).replace(CLOUDFLARE_API_TOKEN, "[redacted]")
-            logging.exception("Cloudflare direct test failed: %s", detail)
-            return "Cloudflare test failed" + (f" (HTTP {status})" if status else "") + ": " + detail[:700]
-
-    # Deterministic inventory lookup: basic stock queries should not depend on an LLM tool call.
-    if any(term in normalized for term in ("low stock", "low-stock", "below reorder", "reorder alerts")):
-        try:
-            records = [r for r in inventory_records() if r["quantity"] <= r["reorder_threshold"]]
-            if not records:
-                return "No low-stock items found. All recorded items are above their reorder thresholds."
-            lines = ["### Low-stock items", "", "| Item | Category | Quantity | Unit | Reorder at |", "|---|---|---:|---|---:|"]
-            for item in records:
-                category = item.get("categories") or {}
-                category_name = category.get("name", "Uncategorised") if isinstance(category, dict) else "Uncategorised"
-                lines.append(f"| {item['name']} | {category_name} | {item['quantity']} | {item.get('unit') or 'pcs'} | {item['reorder_threshold']} |")
-            return "\\n".join(lines)
-        except Exception as exc:
-            logging.exception("Direct low-stock lookup failed: %s", exc)
-            return "I couldn't read the inventory from Supabase. Please check the database connection and try again."
-
-    # Follow-up category filter, e.g. the user replies "Juice" after asking for low stock.
-    prior_text = " ".join(
-        str(turn.get("content", "")) if isinstance(turn, dict)
-        else " ".join(str(part) for part in turn if part)
-        for turn in (history or [])
-    ).lower()
-    if normalized and len(normalized) <= 40 and "low stock" in prior_text:
-        try:
-            records = [r for r in inventory_records() if r["quantity"] <= r["reorder_threshold"]]
-            filtered = []
-            for item in records:
-                category = item.get("categories") or {}
-                category_name = category.get("name", "") if isinstance(category, dict) else ""
-                if normalized in item["name"].lower() or normalized in category_name.lower():
-                    filtered.append(item)
-            if not filtered:
-                return f"No low-stock items matched '{user_text}'."
-            lines = [f"### Low-stock items matching {user_text}", "", "| Item | Category | Quantity | Unit | Reorder at |", "|---|---|---:|---|---:|"]
-            for item in filtered:
-                category = item.get("categories") or {}
-                category_name = category.get("name", "Uncategorised") if isinstance(category, dict) else "Uncategorised"
-                lines.append(f"| {item['name']} | {category_name} | {item['quantity']} | {item.get('unit') or 'pcs'} | {item['reorder_threshold']} |")
-            return "\\n".join(lines)
-        except Exception as exc:
-            logging.exception("Low-stock category filter failed: %s", exc)
-            return "I couldn't filter the inventory just now. Please try again."
+    if not user_text:
+        return "What would you like help with?"
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_to_messages(history))
-    messages.append({"role": "user", "content": message})
-    try:
-        response = ai_chat_completion(
-            model=CLOUDFLARE_MODEL, messages=messages, tools=TOOLS,
-            tool_choice="auto", parallel_tool_calls=False,
-        )
-    except APIStatusError as exc:
-        if exc.status_code in (429, 500, 502, 503, 504):
-            return "Gemini is temporarily unavailable (HTTP " + str(exc.status_code) + "). Please try again in a minute."
-        return "Gemini API request failed (HTTP " + str(exc.status_code) + "). Please contact the app administrator."
-    assistant_message = response.choices[0].message
-    if not assistant_message.tool_calls:
-        return assistant_message.content or "I couldn't generate a response."
-    messages.append(assistant_message)
-    for call in assistant_message.tool_calls:
-        try:
-            args = json.loads(call.function.arguments or "{}")
-            result = execute_tool(call.function.name, args)
-        except Exception as exc:
-            result = f"ERROR: {type(exc).__name__}: {exc}"
-        messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
-    # Return tool results directly. A second model round-trip is unnecessary and
-    # was causing Gemini HTTP 400 errors with the tool-result message format.
-    results = [str(message.get("content", "")) for message in messages if message.get("role") == "tool"]
-    return "\\n".join(result for result in results if result) or "The inventory action finished."
+    messages.append({"role": "user", "content": user_text})
 
+    max_tool_rounds = max(1, min(int(os.getenv("CHAT_MAX_TOOL_ROUNDS", "4")), 6))
+
+    for _round in range(max_tool_rounds + 1):
+        try:
+            response = ai_chat_completion(
+                model=CLOUDFLARE_MODEL,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                parallel_tool_calls=False,
+            )
+        except APIStatusError as exc:
+            return _chat_error_message(exc)
+        except Exception as exc:
+            logging.exception("Unexpected AI assistant error: %s", type(exc).__name__)
+            return _chat_error_message(exc)
+
+        if not getattr(response, "choices", None):
+            return "The AI service returned an empty response. Please try again."
+
+        assistant_message = response.choices[0].message
+        tool_calls = getattr(assistant_message, "tool_calls", None) or []
+
+        if not tool_calls:
+            answer = getattr(assistant_message, "content", None)
+            return answer.strip() if isinstance(answer, str) and answer.strip() else (
+                "I couldn't generate a response. Please try asking in a different way."
+            )
+
+        if _round >= max_tool_rounds:
+            return (
+                "I need another step to finish this request, but I reached the safe "
+                "tool-call limit. Please review the latest inventory state before "
+                "asking me to continue, so an action is not accidentally repeated."
+            )
+
+        # Convert the SDK model to a plain OpenAI-compatible message. Appending the
+        # SDK object itself caused the previous .get() crash and can break provider
+        # serialization on the follow-up request.
+        try:
+            assistant_payload = assistant_message.model_dump(exclude_none=True)
+        except AttributeError:
+            assistant_payload = {
+                "role": "assistant",
+                "content": getattr(assistant_message, "content", None),
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments or "{}",
+                        },
+                    }
+                    for call in tool_calls
+                ],
+            }
+        messages.append(assistant_payload)
+
+        for call in tool_calls:
+            tool_name = getattr(getattr(call, "function", None), "name", "")
+            try:
+                raw_arguments = getattr(call.function, "arguments", None) or "{}"
+                arguments = json.loads(raw_arguments)
+                if not isinstance(arguments, dict):
+                    raise ValueError("Tool arguments must be a JSON object.")
+                result = execute_tool(tool_name, arguments)
+            except Exception as exc:
+                logging.exception("Assistant tool execution failed: %s", tool_name)
+                result = json.dumps({
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": str(result),
+            })
+
+    return (
+        "I reached the limit for this request while working with the inventory. "
+        "No further actions were run. Please ask me to continue."
+    )
 
 def refresh_all():
     items = inventory_records()
