@@ -1479,17 +1479,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     ).then(refresh_all, outputs=refresh_outputs)
 
 
-if __name__ == "__main__":
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=int(os.getenv("PORT", "7860")),
-        auth=(APP_USERNAME, APP_PASSWORD),
-        css=APP_CSS,
-    )
-
-# Mobile navigation layout update: tabs remain visible on narrow screens.
-
-
+APP_CSS += """
 /* Override generic mobile .row stacking rules specifically for the app navigation. */
 @media (max-width: 760px) {
   .gradio-container .row.tla-mobile-nav {
@@ -1507,3 +1497,14 @@ if __name__ == "__main__":
     line-height:1.1 !important; white-space:normal !important; overflow-wrap:anywhere !important;
   }
 }
+"""
+
+if __name__ == "__main__":
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(os.getenv("PORT", "7860")),
+        auth=(APP_USERNAME, APP_PASSWORD),
+        css=APP_CSS,
+    )
+
+# Mobile navigation layout update: tabs remain visible on narrow screens.
