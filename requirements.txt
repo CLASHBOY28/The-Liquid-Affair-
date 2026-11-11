@@ -1,4 +1,4 @@
-gradio
-openai
-supabase
-python-dotenv
+gradio==6.31.0
+openai==3.49.0
+supabase==2.34.1
+python-dotenv==1.2.4
