@@ -1246,45 +1246,38 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
   .tla-kpi strong { font-size:20px !important; }
 }
 
-/* Final Android tab-navigation override.
-   Gradio adds an overflow-menu button when the tab labels do not fit.
-   Keep only real tabs and make the strip swipeable instead. */
+
+
+/* Keep the complete tab strip wider than its viewport so Gradio does not
+   collapse remaining tabs into its responsive three-dot menu. */
 @media (max-width: 760px) {
+  .gradio-container .tabs,
+  .gradio-container [class*="tabs"] {
+    min-width:0 !important;
+  }
   .gradio-container .tab-nav,
   .gradio-container [role="tablist"] {
     display:flex !important;
+    flex-direction:row !important;
     flex-wrap:nowrap !important;
     justify-content:flex-start !important;
-    align-items:center !important;
-    overflow-x:auto !important;
-    overflow-y:hidden !important;
+    align-items:stretch !important;
+    width:max-content !important;
+    min-width:max-content !important;
+    max-width:none !important;
+    overflow:visible !important;
+    gap:clamp(8px,2.5vw,14px) !important;
+    padding:4px 2px 9px !important;
+    margin:0 !important;
     white-space:nowrap !important;
-    gap:clamp(12px, 4vw, 22px) !important;
-    width:100% !important;
-    max-width:100% !important;
-    min-width:0 !important;
+  }
+  /* Make the tab strip itself horizontally scrollable rather than
+     allowing Gradio to move overflow tabs into its menu. */
+  .gradio-container .tab-nav {
     scrollbar-width:none !important;
     -webkit-overflow-scrolling:touch !important;
   }
-  .gradio-container .tab-nav::-webkit-scrollbar,
-  .gradio-container [role="tablist"]::-webkit-scrollbar { display:none !important; }
-
-  /* Gradio's three-dot overflow control is not a tab. */
-  .gradio-container .tab-nav button:not([role="tab"]),
-  .gradio-container [role="tablist"] button:not([role="tab"]),
-  .gradio-container .tab-nav [aria-haspopup="menu"],
-  .gradio-container [role="tablist"] [aria-haspopup="menu"],
-  .gradio-container .tab-nav [data-testid*="overflow"],
-  .gradio-container .tab-nav [data-testid*="more"],
-  .gradio-container [role="tablist"] [data-testid*="overflow"],
-  .gradio-container [role="tablist"] [data-testid*="more"] {
-    display:none !important;
-    visibility:hidden !important;
-    width:0 !important;
-    min-width:0 !important;
-    padding:0 !important;
-    margin:0 !important;
-  }
+  .gradio-container .tab-nav::-webkit-scrollbar { display:none !important; }
   .gradio-container .tab-nav button[role="tab"],
   .gradio-container [role="tablist"] button[role="tab"],
   .gradio-container button[role="tab"] {
@@ -1293,77 +1286,23 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
     width:auto !important;
     min-width:max-content !important;
     max-width:none !important;
+    min-height:44px !important;
+    padding:9px 5px !important;
+    margin:0 !important;
+    font-size:clamp(11px,3vw,14px) !important;
+    line-height:1.15 !important;
     white-space:nowrap !important;
-    padding:10px 3px !important;
-    min-height:46px !important;
-    font-size:14px !important;
     border-radius:0 !important;
     background:transparent !important;
   }
-}
-
-/* Mobile: keep the five primary sections visible together; no overflow menu. */
-@media (max-width: 760px) {
-  .gradio-container .tab-nav,
-  .gradio-container [role="tablist"] {
-    display:grid !important;
-    grid-template-columns:repeat(5,minmax(0,1fr)) !important;
-    grid-auto-flow:column !important;
-    flex-wrap:nowrap !important;
-    align-items:stretch !important;
-    justify-content:stretch !important;
-    gap:2px !important;
-    width:100% !important;
-    max-width:100% !important;
-    overflow:visible !important;
-    white-space:normal !important;
-    padding:4px 0 8px !important;
-    margin:0 0 10px !important;
-    box-sizing:border-box !important;
-  }
-  /* Gradio's final nav child is its overflow/three-dot menu control. */
-  .gradio-container .tab-nav > button:last-child:not([role="tab"]),
-  .gradio-container [role="tablist"] > button:last-child:not([role="tab"]) {
+  /* Hide only the generated overflow-menu trigger. */
+  .gradio-container .tab-nav button[aria-label*="More"],
+  .gradio-container .tab-nav button[aria-label*="more"],
+  .gradio-container [role="tablist"] button[aria-label*="More"],
+  .gradio-container [role="tablist"] button[aria-label*="more"],
+  .gradio-container .tab-nav [aria-haspopup="menu"],
+  .gradio-container [role="tablist"] [aria-haspopup="menu"] {
     display:none !important;
-  }
-  .gradio-container .tab-nav button[role="tab"],
-  .gradio-container [role="tablist"] button[role="tab"],
-  .gradio-container button[role="tab"] {
-    display:flex !important;
-    visibility:visible !important;
-    opacity:1 !important;
-    width:100% !important;
-    min-width:0 !important;
-    max-width:100% !important;
-    flex:none !important;
-    justify-content:center !important;
-    align-items:center !important;
-    min-height:48px !important;
-    height:auto !important;
-    padding:7px 2px !important;
-    margin:0 !important;
-    border-radius:9px 9px 0 0 !important;
-    background:transparent !important;
-    font-size:clamp(9px,2.8vw,12px) !important;
-    line-height:1.15 !important;
-    font-weight:700 !important;
-    white-space:normal !important;
-    overflow-wrap:anywhere !important;
-    text-align:center !important;
-    box-sizing:border-box !important;
-  }
-  .gradio-container .tab-nav button[aria-selected="true"],
-  .gradio-container [role="tablist"] button[aria-selected="true"] {
-    color:#f39a52 !important;
-    border-bottom:2px solid #f39a52 !important;
-  }
-}
-@media (max-width: 380px) {
-  .gradio-container .tab-nav button[role="tab"],
-  .gradio-container [role="tablist"] button[role="tab"] {
-    font-size:9px !important;
-    padding-left:1px !important;
-    padding-right:1px !important;
   }
 }
 """
