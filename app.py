@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from openai import APIStatusError, OpenAI
 from supabase import Client, create_client
 from chatbot_capabilities import calculate_math, current_india_time_context
+from app_auth import load_auth_users
+from audit_identity import pack_actor_note, unpack_actor_note
 
 load_dotenv()
 
@@ -18,15 +20,11 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
-APP_USERNAME = os.environ.get("APP_USERNAME", "")
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+APP_USERS = load_auth_users(os.environ)
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 CLOUDFLARE_MODEL = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast")
-
-if not APP_USERNAME or not APP_PASSWORD:
-    raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
 gemini_client = (
     OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
@@ -246,20 +244,57 @@ def inventory_rows(low_only: bool = False):
     return rows
 
 
+def _actor_column_missing(exc):
+    detail = str(exc).lower()
+    return "actor" in detail and any(
+        marker in detail for marker in ("column", "schema cache", "42703", "pgrst204")
+    )
+
+
+def audit_records(limit=200):
+    table = supabase.table("inventory_audit")
+    try:
+        result = (table.select(
+            "created_at, actor, item_name, action, old_quantity, new_quantity, note"
+        ).order("created_at", desc=True).limit(limit).execute())
+        records = result.data or []
+    except Exception as exc:
+        if not _actor_column_missing(exc):
+            raise
+        result = (table.select(
+            "created_at, item_name, action, old_quantity, new_quantity, note"
+        ).order("created_at", desc=True).limit(limit).execute())
+        records = result.data or []
+        for row in records:
+            row["actor"], row["note"] = unpack_actor_note(row.get("note"))
+    for row in records:
+        row["actor"], row["note"] = unpack_actor_note(row.get("note"), row.get("actor"))
+    return records
+
+
 def audit_rows():
-    result = (supabase.table("inventory_audit")
-              .select("created_at, item_name, action, old_quantity, new_quantity, note")
-              .order("created_at", desc=True).limit(200).execute())
-    return [[r.get("created_at", ""), r.get("item_name", ""), r.get("action", ""),
-             r.get("old_quantity"), r.get("new_quantity"), r.get("note", "")]
-            for r in (result.data or [])]
+    return [[r.get("created_at", ""), r.get("actor", "Legacy"), r.get("item_name", ""),
+             r.get("action", ""), r.get("old_quantity"), r.get("new_quantity"), r.get("note", "")]
+            for r in audit_records()]
 
 
-def write_audit(item_name, action, old_qty=None, new_qty=None, note=None):
-    supabase.table("inventory_audit").insert({
-        "item_name": item_name, "action": action,
+def write_audit(item_name, action, old_qty=None, new_qty=None, note=None, actor=None):
+    payload = {
+        "actor": actor or "Unknown", "item_name": item_name, "action": action,
         "old_quantity": old_qty, "new_quantity": new_qty, "note": note,
-    }).execute()
+    }
+    try:
+        supabase.table("inventory_audit").insert(payload).execute()
+    except Exception as exc:
+        if not _actor_column_missing(exc):
+            raise
+        payload.pop("actor")
+        payload["note"] = pack_actor_note(actor, note)
+        supabase.table("inventory_audit").insert(payload).execute()
+
+
+def authenticated_username(request):
+    return (getattr(request, "username", None) or "Unknown") if request else "Unknown"
 
 
 def suggest_category_for_item(item_name: str):
@@ -362,7 +397,7 @@ def suggest_category_ui(item_name):
     return gr.update(value=category) if category else gr.update()
 
 
-def save_item(name, category, quantity, threshold, unit, expiry_date=None):
+def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor=None):
     name = (name or "").strip()
     category = (category or "").strip()
     unit = (unit or "pcs").strip() or "pcs"
@@ -386,17 +421,17 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None):
             "unit": unit, "expiry_date": expiry_date,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", found.data[0]["id"]).execute())
-        write_audit(name, "set_quantity", old, quantity, "Dashboard")
+        write_audit(name, "set_quantity", old, quantity, "Set from inventory form", actor)
         return f"Updated {name}: {old} → {quantity} {unit}."
     (supabase.table("inventory_items").insert({
         "name": name, "category_id": cat_id, "quantity": quantity,
         "reorder_threshold": threshold, "unit": unit, "expiry_date": expiry_date
     }).execute())
-    write_audit(name, "create", None, quantity, "Dashboard")
+    write_audit(name, "create", None, quantity, "Added from inventory form", actor)
     return f"Added {name}: {quantity} {unit}."
 
 
-def add_custom_field(name, field_type="text"):
+def add_custom_field(name, field_type="text", actor=None):
     name = (name or "").strip()
     if not name:
         raise ValueError("Enter a column name.")
@@ -412,10 +447,11 @@ def add_custom_field(name, field_type="text"):
         "name": name, "field_type": field_type,
         "position": len(existing) + 1
     }).execute()
+    write_audit(f"Column: {name}", "add_column", note=f"Added {field_type} inventory field", actor=actor)
     return f"Added the '{name}' column."
 
 
-def move_custom_field(name, direction):
+def move_custom_field(name, direction, actor=None):
     fields = custom_fields_list()
     index = next((i for i, field in enumerate(fields) if field["name"] == name), None)
     if index is None:
@@ -426,18 +462,20 @@ def move_custom_field(name, direction):
     first, second = fields[index], fields[other]
     supabase.table("inventory_custom_fields").update({"position": second["position"]}).eq("id", first["id"]).execute()
     supabase.table("inventory_custom_fields").update({"position": first["position"]}).eq("id", second["id"]).execute()
+    write_audit(f"Column: {name}", "move_column", note=f"Moved {direction}", actor=actor)
     return f"Moved '{name}' {direction}."
 
 
-def remove_custom_field(name):
+def remove_custom_field(name, actor=None):
     field = next((f for f in custom_fields_list() if f["name"] == name), None)
     if not field:
         raise ValueError("Choose a custom column.")
     supabase.table("inventory_custom_fields").delete().eq("id", field["id"]).execute()
+    write_audit(f"Column: {name}", "remove_column", note="Removed inventory field", actor=actor)
     return f"Removed '{name}' from the visible inventory columns. Existing saved values remain in the records."
 
 
-def save_inventory_table(data):
+def save_inventory_table(data, actor=None):
     if data is None:
         return "No table changes to save."
     headers = inventory_headers()
@@ -458,19 +496,35 @@ def save_inventory_table(data):
         if expiry:
             expiry = str(expiry)[:10]
             datetime.strptime(expiry, "%Y-%m-%d")
-        supabase.table("inventory_items").update({
+        values = {
             "quantity": int(row[3] or 0),
             "unit": str(row[4] or "pcs"),
             "reorder_threshold": int(row[5] or 0),
             "expiry_date": expiry,
             "custom_values": custom_values,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", item_id).execute()
+        }
+        current_result = (supabase.table("inventory_items")
+                          .select("name, quantity, unit, reorder_threshold, expiry_date, custom_values")
+                          .eq("id", item_id).limit(1).execute())
+        if not current_result.data:
+            continue
+        current = current_result.data[0]
+        changed = any(current.get(key) != value for key, value in values.items())
+        if not changed:
+            continue
+        (supabase.table("inventory_items").update({
+            **values, "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", item_id).execute())
+        write_audit(
+            current.get("name") or "Inventory item", "table_update",
+            current.get("quantity"), values["quantity"],
+            "Updated from inventory table", actor,
+        )
         updated += 1
     return f"Saved changes for {updated} inventory item(s)."
 
 
-def adjust_item(name, category, delta):
+def adjust_item(name, category, delta, actor=None):
     name, category = (name or "").strip(), (category or "").strip()
     if not name or delta is None:
         raise ValueError("Enter the item and stock change.")
@@ -492,12 +546,15 @@ def adjust_item(name, category, delta):
     (supabase.table("inventory_items").update({
         "quantity": new, "updated_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", found.data[0]["id"]).execute())
-    write_audit(name, "adjust", old, new, f"delta={int(delta)}")
+    write_audit(name, "adjust", old, new, f"delta={int(delta)}", actor)
     return f"{name}: {old} → {new}."
 
 
-def add_category(name):
+def add_category(name, actor=None):
+    existing = category_id_for(name, create=False)
     category_id_for(name, create=True)
+    if existing is None:
+        write_audit(f"Category: {name.strip()}", "add_category", note="Created category", actor=actor)
     return f"Category '{name.strip().lower()}' is ready."
 
 
@@ -515,6 +572,7 @@ def dashboard_summary():
         '<div class="tla-kpi"><span>Categories</span><strong>' + str(category_count) + '</strong></div>'
         '</div><p class="tla-kpi-note">Low-stock alerts include items at or below their reorder threshold.</p>'
     )
+
 
 TOOLS = [
     {"type": "function", "function": {"name": "calculate_math",
@@ -552,23 +610,23 @@ TOOLS = [
 ]
 
 
-def execute_tool(name: str, args: dict[str, Any]) -> str:
+def execute_tool(name: str, args: dict[str, Any], actor=None) -> str:
     try:
         if name == "calculate_math":
             return calculate_math(args["expression"])
         if name == "add_or_update_item":
             return save_item(args["name"], args.get("category"), args["quantity"],
                              args.get("reorder_threshold", 5), args.get("unit", "pcs"),
-                             args.get("expiry_date"))
+                             args.get("expiry_date"), actor=actor)
         if name == "adjust_stock":
-            return adjust_item(args["name"], args["category"], args["delta"])
+            return adjust_item(args["name"], args.get("category"), args["delta"], actor)
         if name == "list_inventory":
             return json.dumps(inventory_records(), default=str)
         if name == "low_stock":
             return json.dumps([r for r in inventory_records()
                                if r["quantity"] <= r["reorder_threshold"]], default=str)
         if name == "add_category":
-            return add_category(args["name"])
+            return add_category(args["name"], actor)
         if name == "list_categories":
             return json.dumps(categories_list(), default=str)
         return "Unknown inventory action."
@@ -667,7 +725,7 @@ def _chat_error_message(exc):
         return "The AI assistant could not complete the request. " + _provider_error_detail(exc)
     return "I couldn't reach the AI service just now. Please try again in a moment."
 
-def _quick_inventory_reply(user_text):
+def _quick_inventory_reply(user_text, actor=None):
     """Handle common inventory commands directly and safely, without an AI round-trip."""
     import re
 
@@ -730,7 +788,7 @@ def _quick_inventory_reply(user_text):
         if not category_name:
             return "Please provide a category name."
         try:
-            return add_category(category_name)
+            return add_category(category_name, actor)
         except Exception as exc:
             return f"Could not add category '{category_name}': {exc}"
 
@@ -744,7 +802,7 @@ def _quick_inventory_reply(user_text):
         verb, item_name, amount, category = match.groups()
         delta = int(amount) * (-1 if verb.lower() in ("reduce", "decrease", "subtract", "deduct") else 1)
         try:
-            return adjust_item(item_name.strip(), category.strip() if category else None, delta)
+            return adjust_item(item_name.strip(), category.strip() if category else None, delta, actor)
         except Exception as exc:
             return f"Stock was not changed: {exc}"
 
@@ -757,13 +815,14 @@ def _object_value(value, key, default=None):
     return getattr(value, key, default)
 
 
-def chat_fn(message, history, provider="Auto (recommended)"):
+def chat_fn(message, history, provider="Auto (recommended)", request: gr.Request = None):
     """General AI chat with selectable provider and bounded tool execution."""
     user_text = (message or "").strip()
     if not user_text:
         return "What would you like help with?"
 
-    quick_reply = _quick_inventory_reply(user_text)
+    actor = authenticated_username(request)
+    quick_reply = _quick_inventory_reply(user_text, actor)
     if quick_reply is not None:
         return quick_reply
 
@@ -843,7 +902,7 @@ def chat_fn(message, history, provider="Auto (recommended)"):
                 arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
                 if not isinstance(arguments, dict):
                     raise ValueError("Tool arguments must be a JSON object.")
-                result = execute_tool(tool_name, arguments)
+                result = execute_tool(tool_name, arguments, actor)
             except Exception as exc:
                 logging.exception("Assistant tool execution failed: %s", tool_name)
                 result = json.dumps({
@@ -881,9 +940,10 @@ def refresh_all():
     )
 
 
-def add_item_ui(name, category, quantity, threshold, unit, expiry_date):
+def add_item_ui(name, category, quantity, threshold, unit, expiry_date, request: gr.Request = None):
     try:
-        message = save_item(name, category, quantity, threshold, unit, expiry_date)
+        message = save_item(name, category, quantity, threshold, unit, expiry_date,
+                            actor=authenticated_username(request))
         return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
     except Exception as exc:
         return f"Could not save item: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
@@ -911,49 +971,49 @@ def suggest_adjust_category(item_name):
     return gr.update(value=None)
 
 
-def adjust_ui(name, category, delta):
+def adjust_ui(name, category, delta, request: gr.Request = None):
     try:
-        message = adjust_item(name, category, delta)
+        message = adjust_item(name, category, delta, authenticated_username(request))
         return message, dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
     except Exception as exc:
         return f"Could not adjust stock: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
 
 
-def custom_field_ui(name, field_type):
+def custom_field_ui(name, field_type, request: gr.Request = None):
     try:
-        message = add_custom_field(name, field_type)
+        message = add_custom_field(name, field_type, authenticated_username(request))
         return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True)), gr.update(choices=[f["name"] for f in custom_fields_list()])
     except Exception as exc:
         return f"Could not add column: {exc}", gr.update(), gr.update(), gr.update()
 
 
-def move_field_ui(name, direction):
+def move_field_ui(name, direction, request: gr.Request = None):
     try:
-        message = move_custom_field(name, direction)
+        message = move_custom_field(name, direction, authenticated_username(request))
         return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True))
     except Exception as exc:
         return f"Could not move column: {exc}", gr.update(), gr.update()
 
 
-def remove_field_ui(name):
+def remove_field_ui(name, request: gr.Request = None):
     try:
-        message = remove_custom_field(name)
+        message = remove_custom_field(name, authenticated_username(request))
         return message, gr.update(headers=inventory_headers(), value=inventory_rows()), gr.update(headers=inventory_headers(), value=inventory_rows(True)), gr.update(choices=[f["name"] for f in custom_fields_list()])
     except Exception as exc:
         return f"Could not remove column: {exc}", gr.update(), gr.update(), gr.update()
 
 
-def save_table_ui(data):
+def save_table_ui(data, request: gr.Request = None):
     try:
-        message = save_inventory_table(data)
+        message = save_inventory_table(data, authenticated_username(request))
         return message, gr.update(value=inventory_rows()), gr.update(value=inventory_rows(True)), dashboard_summary(), audit_rows()
     except Exception as exc:
         return f"Could not save table: {exc}", gr.update(), gr.update(), dashboard_summary(), audit_rows()
 
 
-def add_category_ui(name):
+def add_category_ui(name, request: gr.Request = None):
     try:
-        message = add_category(name)
+        message = add_category(name, authenticated_username(request))
         cats = categories_list()
         return message, [[c["id"], c["name"]] for c in cats], gr.update(choices=[c["name"] for c in cats])
     except Exception as exc:
@@ -1010,9 +1070,7 @@ def mobile_category_cards():
 
 
 def mobile_audit_cards():
-    records = (supabase.table("inventory_audit")
-               .select("created_at, item_name, action, old_quantity, new_quantity, note")
-               .order("created_at", desc=True).limit(100).execute()).data or []
+    records = audit_records(limit=100)
     if not records:
         return '<div class="mobile-empty">No stock changes recorded yet.</div>'
     cards = []
@@ -1030,7 +1088,8 @@ def mobile_audit_cards():
             _html_escape(row.get("old_quantity") if row.get("old_quantity") is not None else "—") +
             '</strong></div><div><small>New quantity</small><strong>' +
             _html_escape(row.get("new_quantity") if row.get("new_quantity") is not None else "—") +
-            '</strong></div></div><p class="tla-card-foot">' +
+            '</strong></div></div><p class="tla-card-foot"><strong>User:</strong> ' +
+            _html_escape(row.get("actor") or "Legacy") + '<br>' +
             _html_escape(row.get("note") or "") + '</p></article>'
         )
     return '<div class="tla-mobile-card-list">' + "".join(cards) + '</div>'
@@ -1438,7 +1497,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             )
         with gr.Column(visible=False, elem_classes=["tla-page"]) as history_page:
             audit_table = gr.Dataframe(
-                headers=["Date", "Item", "Action", "Old quantity", "New quantity", "Note"],
+                headers=["Date", "User", "Item", "Action", "Old quantity", "New quantity", "Note"],
                 interactive=False, wrap=True, elem_classes=["desktop-only"]
             )
             audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
@@ -1517,7 +1576,7 @@ if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
         server_port=int(os.getenv("PORT", "7860")),
-        auth=(APP_USERNAME, APP_PASSWORD),
+        auth=APP_USERS,
         css=APP_CSS,
     )
 
