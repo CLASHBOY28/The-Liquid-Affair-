@@ -73,8 +73,49 @@ def gemini_chat_completion(**kwargs):
     raise last_error
 
 
+def _provider_error_detail(exc):
+    """Extract a short provider message without exposing request headers or API keys."""
+    import re
+
+    detail = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict):
+            detail = str(error.get("message") or error.get("detail") or "")
+        else:
+            detail = str(error)
+    elif isinstance(body, str):
+        detail = body
+
+    if not detail:
+        response = getattr(exc, "response", None)
+        if response is not None:
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    error = payload.get("error", payload)
+                    detail = str(error.get("message") or error.get("detail") or error)
+            except Exception:
+                try:
+                    detail = str(response.text or "")
+                except Exception:
+                    detail = ""
+
+    if not detail:
+        detail = str(exc)
+
+    # Defensive redaction in case a provider echoes a credential-like value.
+    detail = re.sub(
+        r"(?i)(api[_ -]?key|authorization|bearer)\\s*[:=]\\s*[^\\s,;]+",
+        r"\\1=[redacted]",
+        detail,
+    )
+    return " ".join(detail.split())[:320]
+
+
 def ai_chat_completion(provider="Auto (recommended)", **kwargs):
-    """Route requests to the provider selected in the AI assistant dropdown."""
+    """Route requests to the selected provider, preserving provider error details."""
     request = dict(kwargs)
     request.pop("model", None)
 
@@ -83,6 +124,8 @@ def ai_chat_completion(provider="Auto (recommended)", **kwargs):
             raise RuntimeError("Groq is not configured. Add GROQ_API_KEY in Railway Variables.")
         payload = dict(request)
         payload["model"] = GROQ_MODEL
+        # GPT-OSS 120B supports function calling but not parallel tool calls.
+        payload["parallel_tool_calls"] = False
         return groq_client.chat.completions.create(**payload)
 
     def call_gemini():
@@ -90,13 +133,20 @@ def ai_chat_completion(provider="Auto (recommended)", **kwargs):
             raise RuntimeError("Gemini is not configured. Add GEMINI_API_KEY in Railway Variables.")
         payload = dict(request)
         payload["model"] = MODEL
+        # Gemini's OpenAI-compatible endpoint supports tools/tool_choice; omit
+        # the optional parallel_tool_calls field for maximum compatibility.
+        payload.pop("parallel_tool_calls", None)
         return gemini_chat_completion(**payload)
 
     def call_cloudflare():
         if cloudflare_client is None:
-            raise RuntimeError("Cloudflare Workers AI is not configured. Add CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in Railway Variables.")
+            raise RuntimeError(
+                "Cloudflare Workers AI is not configured. Add CLOUDFLARE_ACCOUNT_ID "
+                "and CLOUDFLARE_API_TOKEN in Railway Variables."
+            )
         payload = dict(request)
         payload["model"] = CLOUDFLARE_MODEL
+        payload.pop("parallel_tool_calls", None)
         return cloudflare_client.chat.completions.create(**payload)
 
     selected = (provider or "Auto (recommended)").strip()
@@ -108,25 +158,30 @@ def ai_chat_completion(provider="Auto (recommended)", **kwargs):
     if selected in routes:
         return routes[selected]()
 
-    # Auto mode tries only providers that have credentials configured.
+    # Prefer Groq, then Gemini, with Cloudflare as the final fallback.
     errors = []
-    for name, fn, configured in (
+    configured_routes = (
         ("Groq", call_groq, groq_client is not None),
-        ("Cloudflare Workers AI", call_cloudflare, cloudflare_client is not None),
         ("Gemini", call_gemini, gemini_client is not None),
-    ):
+        ("Cloudflare Workers AI", call_cloudflare, cloudflare_client is not None),
+    )
+    for name, fn, configured in configured_routes:
         if not configured:
             continue
         try:
             return fn()
         except Exception as exc:
-            errors.append(f"{name}: {type(exc).__name__}")
-            logging.exception("%s failed in Auto mode", name)
+            status = getattr(exc, "status_code", None)
+            detail = _provider_error_detail(exc)
+            suffix = f" (HTTP {status})" if status else ""
+            errors.append(f"{name}{suffix}: {detail}")
+            logging.warning("AI provider %s failed%s: %s", name, suffix, detail)
+
     raise RuntimeError(
         "No configured AI provider could complete the request. "
-        + ("; ".join(errors) if errors else "Add an API key for Groq, Gemini, or Cloudflare Workers AI.")
+        + ("; ".join(errors) if errors else
+           "Add an API key for Groq, Gemini, or Cloudflare Workers AI.")
     )
-
 
 def category_id_for(name: str, create: bool = False):
     name = name.strip().lower()
@@ -570,17 +625,28 @@ INVENTORY AND BUSINESS DATA:
 
 
 def _chat_error_message(exc):
-    """Return a safe, useful error without exposing credentials or request headers."""
+    """Return a useful provider error without exposing credentials."""
     status = getattr(exc, "status_code", None)
-    if status == 429:
-        return "The AI service is busy or its rate limit has been reached. Please try again shortly."
-    if status in (500, 502, 503, 504):
-        return "The AI service is temporarily unavailable. Please try again in a minute."
-    if status:
-        return f"The AI request failed (HTTP {status}). Please try again; if it continues, contact the app administrator."
-    logging.exception("AI assistant request failed")
-    return "I couldn't reach the AI service just now. Please try again in a moment."
+    detail = _provider_error_detail(exc)
 
+    if status == 429:
+        return "The AI provider reached its rate or usage limit. " + (detail or "Please try again later.")
+    if status in (401, 403):
+        return "The AI provider rejected its API key or the key lacks permission. Check the key in Railway Variables. " + detail
+    if status == 404:
+        return "The selected AI model or endpoint was not found. Check the model setting. " + detail
+    if status in (400, 422):
+        return "The AI provider rejected the request format. Provider detail: " + detail
+    if status in (500, 502, 503, 504):
+        return "The AI provider is temporarily unavailable. " + detail
+    if status:
+        return f"The AI request failed (HTTP {status}). " + detail
+
+    logging.exception("AI assistant request failed")
+    message = str(exc).strip()
+    if message:
+        return "The AI assistant could not complete the request. " + _provider_error_detail(exc)
+    return "I couldn't reach the AI service just now. Please try again in a moment."
 
 def _quick_inventory_reply(user_text):
     """Handle common inventory commands directly and safely, without an AI round-trip."""
