@@ -421,14 +421,14 @@ TOOLS = [
          "delta": {"type": "integer"}},
          "required": ["name", "category", "delta"]}}},
     {"type": "function", "function": {"name": "list_inventory",
-     "description": "List all inventory items.", "parameters": {"type": "object", "properties": {}}}},
+     "description": "List all inventory items."}},
     {"type": "function", "function": {"name": "low_stock",
-     "description": "List items at or below their reorder threshold.", "parameters": {"type": "object", "properties": {}}}},
+     "description": "List items at or below their reorder threshold."}},
     {"type": "function", "function": {"name": "add_category",
      "description": "Create an inventory category.", "parameters": {
          "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "list_categories",
-     "description": "List all inventory categories.", "parameters": {"type": "object", "properties": {}}}},
+     "description": "List all inventory categories."}},
 ]
 
 
@@ -527,11 +527,60 @@ def _chat_error_message(exc):
     return "I couldn't reach the AI service just now. Please try again in a moment."
 
 
+def _quick_inventory_reply(user_text):
+    """Answer common read-only inventory checks directly, without an AI round-trip."""
+    normalized = " ".join((user_text or "").lower().split()).strip(" .!?")
+    low_stock_phrases = (
+        "show low stock", "show me low stock", "show all low stock",
+        "list low stock", "low stock items", "show low stock items",
+        "show items low on stock", "what is low on stock",
+        "what's low on stock", "what needs reordering", "show reorder list",
+        "list items to reorder",
+    )
+    if not any(phrase in normalized for phrase in low_stock_phrases):
+        return None
+
+    records = inventory_records()
+    low_items = [
+        item for item in records
+        if item.get("quantity", 0) <= item.get("reorder_threshold", 0)
+    ]
+    if not low_items:
+        return "You're all set — no items are currently at or below their reorder threshold."
+
+    lines = [f"### Low-stock items ({len(low_items)})"]
+    for item in low_items:
+        category_data = item.get("categories") or {}
+        if isinstance(category_data, list):
+            category_data = category_data[0] if category_data else {}
+        category = category_data.get("name", "Uncategorised") if isinstance(category_data, dict) else "Uncategorised"
+        name = str(item.get("name") or "Unnamed item")
+        quantity = item.get("quantity", 0)
+        unit = str(item.get("unit") or "pcs")
+        threshold = item.get("reorder_threshold", 0)
+        lines.append(
+            f"- **{name}** — {quantity} {unit} available; reorder at {threshold} "
+            f"({category})."
+        )
+    return "\n".join(lines)
+
+
+def _object_value(value, key, default=None):
+    """Read a field from either an SDK model or a plain dictionary."""
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
 def chat_fn(message, history):
     """General AI chat with bounded, multi-step inventory tool execution."""
     user_text = (message or "").strip()
     if not user_text:
         return "What would you like help with?"
+
+    quick_reply = _quick_inventory_reply(user_text)
+    if quick_reply is not None:
+        return quick_reply
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history_to_messages(history))
@@ -558,10 +607,13 @@ def chat_fn(message, history):
             return "The AI service returned an empty response. Please try again."
 
         assistant_message = response.choices[0].message
-        tool_calls = getattr(assistant_message, "tool_calls", None) or []
-
+        tool_calls = (
+            _object_value(assistant_message, "tool_calls")
+            or _object_value(assistant_message, "toolCalls")
+            or []
+        )
+        answer = _object_value(assistant_message, "content")
         if not tool_calls:
-            answer = getattr(assistant_message, "content", None)
             return answer.strip() if isinstance(answer, str) and answer.strip() else (
                 "I couldn't generate a response. Please try asking in a different way."
             )
@@ -573,34 +625,37 @@ def chat_fn(message, history):
                 "asking me to continue, so an action is not accidentally repeated."
             )
 
-        # Convert the SDK model to a plain OpenAI-compatible message. Appending the
-        # SDK object itself caused the previous .get() crash and can break provider
-        # serialization on the follow-up request.
-        try:
-            assistant_payload = assistant_message.model_dump(exclude_none=True)
-        except AttributeError:
-            assistant_payload = {
-                "role": "assistant",
-                "content": getattr(assistant_message, "content", None),
-                "tool_calls": [
-                    {
-                        "id": call.id,
-                        "type": "function",
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments or "{}",
-                        },
-                    }
-                    for call in tool_calls
-                ],
-            }
+        # Normalize SDK model objects and Gemini's camelCase toolCalls alias into
+        # the snake_case OpenAI message format before sending the next tool result.
+        normalized_calls = []
+        for index, call in enumerate(tool_calls):
+            function = _object_value(call, "function", {}) or {}
+            call_id = str(_object_value(call, "id") or f"call_{_round}_{index}")
+            function_name = str(_object_value(function, "name", "") or "")
+            raw_arguments = _object_value(function, "arguments", "{}") or "{}"
+            if not isinstance(raw_arguments, str):
+                raw_arguments = json.dumps(raw_arguments)
+            normalized_calls.append({
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": function_name,
+                    "arguments": raw_arguments,
+                },
+            })
+
+        assistant_payload = {"role": "assistant"}
+        if answer is not None:
+            assistant_payload["content"] = answer
+        assistant_payload["tool_calls"] = normalized_calls
         messages.append(assistant_payload)
 
-        for call in tool_calls:
-            tool_name = getattr(getattr(call, "function", None), "name", "")
+        for call in normalized_calls:
+            tool_name = call["function"]["name"]
+            call_id = call["id"]
             try:
-                raw_arguments = getattr(call.function, "arguments", None) or "{}"
-                arguments = json.loads(raw_arguments)
+                raw_arguments = call["function"]["arguments"] or "{}"
+                arguments = json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
                 if not isinstance(arguments, dict):
                     raise ValueError("Tool arguments must be a JSON object.")
                 result = execute_tool(tool_name, arguments)
@@ -612,7 +667,7 @@ def chat_fn(message, history):
                 })
             messages.append({
                 "role": "tool",
-                "tool_call_id": call.id,
+                "tool_call_id": call_id,
                 "content": str(result),
             })
 
