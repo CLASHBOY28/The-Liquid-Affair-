@@ -1,9 +1,13 @@
+import ast
 import json
 import logging
+import math
+import operator
 import os
 import time
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -515,7 +519,70 @@ def dashboard_summary():
         '</div><p class="tla-kpi-note">Low-stock alerts include items at or below their reorder threshold.</p>'
     )
 
+
+def calculate_math(expression: str) -> str:
+    """Evaluate a restricted arithmetic expression without eval/exec."""
+    if not isinstance(expression, str) or not expression.strip() or len(expression) > 240:
+        raise ValueError("Enter a short arithmetic expression.")
+    expression = expression.strip().replace(",", "")
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError("I couldn't understand that math expression.") from exc
+
+    binary_ops = {
+        ast.Add: operator.add, ast.Sub: operator.sub,
+        ast.Mult: operator.mul, ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+    unary_ops = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+
+    def visit(node, depth=0):
+        if depth > 20:
+            raise ValueError("Expression is too complex.")
+        if isinstance(node, ast.Expression):
+            return visit(node.body, depth + 1)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+            value = node.value
+        elif isinstance(node, ast.BinOp) and type(node.op) in binary_ops:
+            left, right = visit(node.left, depth + 1), visit(node.right, depth + 1)
+            if isinstance(node.op, ast.Pow) and abs(right) > 12:
+                raise ValueError("Exponent is too large.")
+            value = binary_ops[type(node.op)](left, right)
+        elif isinstance(node, ast.UnaryOp) and type(node.op) in unary_ops:
+            value = unary_ops[type(node.op)](visit(node.operand, depth + 1))
+        else:
+            raise ValueError("Only numbers, parentheses, and +, -, *, /, //, %, and ** are supported.")
+        if not math.isfinite(float(value)) or abs(value) > 1e100:
+            raise ValueError("The result is outside the supported range.")
+        return value
+
+    try:
+        result = visit(tree)
+    except ZeroDivisionError:
+        raise ValueError("Division by zero is not allowed.")
+    return f"{result:.12g}" if isinstance(result, float) else str(result)
+
+
+def current_india_time_context() -> str:
+    """Fresh server time for every chat request, explicitly in India Standard Time."""
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    return (
+        "CURRENT DATE AND TIME (live server clock; refreshes every request): "
+        + now.strftime("%A, %d %B %Y, %I:%M:%S %p IST (Asia/Kolkata)")
+        + ". Use this as the source of truth for questions about today, now, "
+          "the current time, or date/time calculations. Do not guess or reuse "
+          "a time from earlier conversation turns."
+    )
+
+
 TOOLS = [
+    {"type": "function", "function": {"name": "calculate_math",
+     "description": "Accurately calculate arithmetic. Use for all numerical calculations rather than mental arithmetic. Supports parentheses and +, -, *, /, //, %, and **. Pass only a mathematical expression, e.g. (250*3)+18 or 500*0.18.",
+     "parameters": {"type": "object", "properties": {
+         "expression": {"type": "string", "description": "A mathematical expression using numbers and supported arithmetic operators."}},
+         "required": ["expression"], "additionalProperties": False}}},
     {"type": "function", "function": {"name": "add_or_update_item",
      "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Never ask for category when the item name matches one existing inventory item.",
      "parameters": {"type": "object", "properties": {
@@ -548,6 +615,8 @@ TOOLS = [
 
 def execute_tool(name: str, args: dict[str, Any]) -> str:
     try:
+        if name == "calculate_math":
+            return calculate_math(args["expression"])
         if name == "add_or_update_item":
             return save_item(args["name"], args.get("category"), args["quantity"],
                              args.get("reorder_threshold", 5), args.get("unit", "pcs"),
@@ -602,6 +671,12 @@ def history_to_messages(history):
 
 
 SYSTEM_PROMPT = """
+You have access to a live clock context appended to your system instructions on every request.
+For every arithmetic calculation (including percentages, discounts, totals, ratios, and multi-step maths),
+call the calculate_math tool with a valid expression and report its result. Never guess or do arithmetic
+mentally when the calculator tool can be used. For percentage-of calculations, convert to multiplication
+(e.g. 18% of 500 -> 500*18/100). For a percentage increase/decrease, calculate the exact expression.
+If a word problem needs multiple steps, use the calculator for each step or combine them in one expression.
 You are the friendly, capable AI assistant for The Liquid Affair, a mobile
 bartending and bar-operations business.
 
@@ -753,7 +828,7 @@ def chat_fn(message, history, provider="Auto (recommended)"):
     if quick_reply is not None:
         return quick_reply
 
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT + "\\n\\n" + current_india_time_context()}]
     messages.extend(history_to_messages(history))
     messages.append({"role": "user", "content": user_text})
 
