@@ -517,7 +517,7 @@ def dashboard_summary():
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_or_update_item",
-     "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Do not ask for category when the item already exists.",
+     "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Never ask for category when the item name matches one existing inventory item.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. For existing items, omit this and use the saved category."},
          "quantity": {"type": "integer", "minimum": 0},
@@ -526,9 +526,9 @@ TOOLS = [
          "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
          "required": ["name", "quantity"]}}},
     {"type": "function", "function": {"name": "adjust_stock",
-     "description": "Increase or decrease an existing item's stock by a delta. Category is optional; infer it from saved inventory. Ask only if the item name is ambiguous.",
+     "description": "Increase or decrease an existing item's stock by a delta. Category is optional; infer it from saved inventory. Never ask for category when the item name matches one existing inventory item. Ask only if multiple saved items share that name.",
      "parameters": {"type": "object", "properties": {
-         "name": {"type": "string"}, "category": {"type": "string"},
+         "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. Omit for an existing item; use its saved category."},
          "delta": {"type": "integer"}},
          "required": ["name", "delta"]}}},
     {"type": "function", "function": {"name": "list_inventory",
@@ -549,7 +549,7 @@ TOOLS = [
 def execute_tool(name: str, args: dict[str, Any]) -> str:
     try:
         if name == "add_or_update_item":
-            return save_item(args["name"], args["category"], args["quantity"],
+            return save_item(args["name"], args.get("category"), args["quantity"],
                              args.get("reorder_threshold", 5), args.get("unit", "pcs"),
                              args.get("expiry_date"))
         if name == "adjust_stock":
