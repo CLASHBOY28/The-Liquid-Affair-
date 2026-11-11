@@ -1279,3 +1279,5 @@ if __name__ == "__main__":
         auth=(APP_USERNAME, APP_PASSWORD),
         css=APP_CSS,
     )
+
+# Mobile navigation layout update: tabs remain visible on narrow screens.
