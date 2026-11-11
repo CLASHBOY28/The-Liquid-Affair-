@@ -869,6 +869,28 @@ def add_item_ui(name, category, quantity, threshold, unit, expiry_date):
         return f"Could not save item: {exc}", dashboard_summary(), inventory_rows(), inventory_rows(True), audit_rows()
 
 
+
+def suggest_adjust_category(item_name):
+    """Auto-select the item's category when its name identifies one category."""
+    name = (item_name or "").strip().casefold()
+    if not name:
+        return gr.update(value=None)
+    matches = [
+        record for record in inventory_records()
+        if (record.get("name") or "").strip().casefold() == name
+    ]
+    category_names = list(dict.fromkeys(
+        ((record.get("categories") or {}).get("name") or "").strip()
+        for record in matches
+        if ((record.get("categories") or {}).get("name") or "").strip()
+    ))
+    if len(category_names) == 1:
+        return gr.update(value=category_names[0])
+    if len(category_names) > 1:
+        return gr.update(value=None, info="This item name exists in multiple categories. Please select the correct category.")
+    return gr.update(value=None)
+
+
 def adjust_ui(name, category, delta):
     try:
         message = adjust_item(name, category, delta)
@@ -1153,6 +1175,11 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             with gr.Row():
                 adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
                 adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
+                adjust_name.change(
+                    fn=suggest_adjust_category,
+                    inputs=adjust_name,
+                    outputs=adjust_category,
+                )
                 adjust_delta = gr.Number(label="Stock change (+/-)", precision=0)
             adjust_button = gr.Button("Adjust stock")
             adjust_status = gr.Markdown()
