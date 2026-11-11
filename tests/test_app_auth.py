@@ -43,7 +43,7 @@ class AuthConfigurationTests(unittest.TestCase):
         for environment in (
             {},
             {"APP_USERNAME": "owner"},
-            {"APP_USERNAME": "owner", "APP_PASSWORD": "secret", "APP_USERNAME_2": "staff"},
+            {"APP_USERNAME_2": "staff"},
         ):
             with self.subTest(environment=environment):
                 with self.assertRaisesRegex(ValueError, "at least one complete"):
