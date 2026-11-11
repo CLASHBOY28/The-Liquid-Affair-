@@ -583,6 +583,20 @@ def _quick_inventory_reply(user_text):
             )
         return "\n".join(lines)
 
+    # Explicit category creation: "Add category Syrups".
+    category_match = re.fullmatch(
+        r"(?:add|create)\\s+(?:a\\s+)?category\\s+(.+)",
+        raw, flags=re.IGNORECASE
+    )
+    if category_match:
+        category_name = category_match.group(1).strip().strip("\\\"' ")
+        if not category_name:
+            return "Please provide a category name."
+        try:
+            return add_category(category_name)
+        except Exception as exc:
+            return f"Could not add category '{category_name}': {exc}"
+
     # Explicit stock adjustment: "Reduce Straws by 5 in Straws".
     match = re.fullmatch(
         r"(reduce|decrease|subtract|deduct|increase|add)\s+(.+?)\s+by\s+(\d+)\s+in\s+(.+)",
