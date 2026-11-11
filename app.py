@@ -14,7 +14,9 @@ load_dotenv()
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip()
 APP_USERNAME = os.environ.get("APP_USERNAME", "")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
@@ -25,7 +27,14 @@ CLOUDFLARE_MODEL = os.getenv("CLOUDFLARE_MODEL", "@cf/meta/llama-3.3-70b-instruc
 if not APP_USERNAME or not APP_PASSWORD:
     raise RuntimeError("Set APP_USERNAME and APP_PASSWORD before starting the app.")
 
-gemini_client = OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+gemini_client = (
+    OpenAI(api_key=GEMINI_API_KEY, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+    if GEMINI_API_KEY else None
+)
+groq_client = (
+    OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+    if GROQ_API_KEY else None
+)
 cloudflare_client = None
 if CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN:
     cloudflare_client = OpenAI(
@@ -36,7 +45,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
 def gemini_chat_completion(**kwargs):
-    """Use a short retry for temporary outages, then try the fallback model."""
+    """Use Gemini only when configured; try a short retry and configured fallback."""
+    if gemini_client is None:
+        raise RuntimeError("No AI provider is configured. Add GROQ_API_KEY or GEMINI_API_KEY.")
     requested_model = kwargs.get("model", MODEL)
     models = [requested_model]
     fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.6-flash")
@@ -63,7 +74,14 @@ def gemini_chat_completion(**kwargs):
 
 
 def ai_chat_completion(**kwargs):
-    """Prefer Cloudflare Workers AI when configured; log failures before falling back to Gemini."""
+    """Try Groq first when configured, then Cloudflare, then Gemini."""
+    if groq_client is not None:
+        try:
+            request = dict(kwargs)
+            request["model"] = GROQ_MODEL
+            return groq_client.chat.completions.create(**request)
+        except Exception as exc:
+            logging.exception("Groq request failed; trying next configured provider: %s", exc)
     if cloudflare_client is not None:
         try:
             request = dict(kwargs)
