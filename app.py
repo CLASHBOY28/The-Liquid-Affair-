@@ -1161,6 +1161,18 @@ def chat_fn(message, history, provider="Auto (recommended)", request: gr.Request
         return "What would you like help with?"
 
     actor = authenticated_username(request)
+    # Record every incoming chatbot message, including read-only questions and
+    # messages handled by the quick-command path. Write operations retain their
+    # separate detailed stock-change audit entries.
+    try:
+        write_audit(
+            "Chatbot", "chat_message",
+            note=f"User message: {user_text[:500]}",
+            actor=actor,
+        )
+    except Exception:
+        logging.exception("Could not record chatbot usage in inventory audit")
+        return "I couldn't start the chatbot because your usage could not be recorded in Stock History. Please try again or contact the administrator."
     quick_reply = _quick_inventory_reply(user_text, actor)
     if quick_reply is not None:
         return quick_reply
