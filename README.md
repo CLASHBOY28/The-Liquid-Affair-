@@ -18,6 +18,7 @@ A private, mobile-friendly inventory and bar-operations web app built with Gradi
 - Add items, set exact quantities, and adjust stock
 - Categories and customizable inventory columns
 - Stock-change audit history
+- Event Stock: saved event sheets with editable rows and custom columns
 - AI assistant with selectable Groq, Gemini, and Cloudflare Workers AI providers
 - Chat-based inventory lookup and updates
 - Two individual logins with shared inventory and named user history
@@ -57,6 +58,10 @@ Optional model overrides: `GROQ_MODEL`, `GEMINI_MODEL`, and `GEMINI_FALLBACK_MOD
 Set both `APP_USERNAME_2` and `APP_PASSWORD_2` in Railway Variables to enable the second login. The app also accepts the older Railway names `APP_USERNAME2` and `APP_PASSWORD2`. Keep the usernames distinct and use a separate long, unique password for each account. A partially configured pair is ignored if another complete pair exists; at least one complete pair is always required. Never commit `.env`, passwords, API keys, or the Supabase service-role key.
 
 For named audit rows in an existing Supabase database, run `migration_add_audit_actor.sql` once in the Supabase SQL Editor. The app keeps logging the username in the existing note field until that migration is applied, so stock changes remain attributable during setup. The Stock History page shows the user, action, item, previous/new quantities, and note in one shared log.
+
+## Event Stock database setup
+
+Before using Event Stock, run `event_stock_migration.sql` once in Supabase Dashboard → SQL Editor. Event sheets are separate from main Inventory and do not automatically deduct main stock. Deleting an event requires typing its exact name and permanently deletes that event sheet.
 
 ## Run locally
 
