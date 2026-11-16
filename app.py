@@ -2373,10 +2373,33 @@ APP_CSS += r"""
     width: 100% !important;
     min-width: 0 !important;
   }
+  .gradio-container .inventory-page .mobile-only {
+    display:block !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    overflow-x:hidden !important;
+  }
   .gradio-container .inventory-page .tla-mobile-card-list {
-    display: grid !important;
-    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
-    gap: 9px !important;
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    grid-auto-flow:row !important;
+    gap:9px !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    box-sizing:border-box !important;
+    overflow-x:clip !important;
+  }
+  .gradio-container .inventory-page .tla-mobile-card-list > .tla-mobile-card {
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    box-sizing:border-box !important;
+  }
+  .gradio-container .inventory-page .tla-mobile-card-list,
+  .gradio-container .inventory-page .tla-mobile-card-list * {
+    white-space:normal !important;
   }
   .gradio-container .inventory-page .tla-mobile-card {
     display:flex !important;
