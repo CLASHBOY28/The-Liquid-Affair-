@@ -1436,6 +1436,18 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 .gradio-container .column { min-width:0 !important; }
 .gradio-container input, .gradio-container textarea, .gradio-container select { min-height:44px !important; font-size:16px !important; border-radius:11px !important; }
 .gradio-container button { min-height:44px !important; border-radius:11px !important; font-weight:650 !important; touch-action:manipulation; }
+/* Desktop controls: compact but still comfortably clickable. Keep mobile touch targets unchanged. */
+@media (min-width: 761px) {
+  .gradio-container button:not([role="tab"]):not(.tla-nav-button) {
+    min-height:36px !important;
+    height:auto !important;
+    padding:8px 14px !important;
+    font-size:13px !important;
+    line-height:1.2 !important;
+    width:auto !important;
+    max-width:100% !important;
+  }
+}
 .tla-header { display:flex !important; align-items:center !important; justify-content:flex-start !important; gap:18px !important; padding:18px 22px !important; margin:0 0 14px !important; border:1px solid color-mix(in srgb,var(--tla-gold) 35%,transparent) !important; border-radius:18px !important; background:linear-gradient(110deg,color-mix(in srgb,var(--tla-panel) 95%,transparent),var(--tla-bg)) !important; box-shadow:0 8px 26px rgba(0,0,0,.16) !important; }
 .tla-logo { width:86px !important; height:86px !important; flex:none !important; }
 .tla-brand h1 { margin:0 !important; font-size:clamp(23px,3vw,34px) !important; letter-spacing:1.5px !important; line-height:1.15 !important; }
