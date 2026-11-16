@@ -701,8 +701,9 @@ def event_stock_add_inventory_item(event_id, item_id, quantity, data):
         new_row[lowered.index("item")] = item["name"]
         new_row[lowered.index("quantity")] = qty
         rows.append(new_row)
-        event_stock_validate_allocations(event_id, cols, rows)
-        return f'Added {item["name"]} × {qty}. Save event stock to keep the change.', gr.update(value=rows, headers=cols)
+        if int(item.get("quantity") or 0) < qty:
+            raise ValueError(f'Not enough stock for "{item["name"]}". Available: {item.get("quantity", 0)}.')
+        return f'Added {item["name"]} × {qty} to the draft. Save event stock to deduct it from main Inventory.', gr.update(value=rows, headers=cols)
     except Exception as exc:
         return "Could not add item: " + str(exc), gr.update()
 
@@ -756,11 +757,14 @@ def event_stock_rename(event_id,name):
         return "Renamed event to "+name,gr.update(choices=[(x["name"],str(x["id"])) for x in event_stock_events()],value=str(event_id)),name,name
     except Exception as exc: return "Could not rename event: "+str(exc),gr.update(),name or "",""
 
-def event_stock_delete(event_id,confirmation):
+def event_stock_delete(event_id, confirmation, request: gr.Request = None):
     try:
         e=event_stock_get(event_id)
         if (confirmation or "").strip()!=e["name"]: raise ValueError("Type the event name exactly to confirm deletion.")
-        supabase.table("event_stock_events").delete().eq("id",int(event_id)).execute()
+        supabase.rpc("event_stock_apply", {
+            "p_event_id": int(event_id), "p_rows": None,
+            "p_actor": authenticated_username(request), "p_delete": True
+        }).execute()
         remaining=event_stock_events(); choices=[(x["name"],str(x["id"])) for x in remaining]
         if remaining:
             table,cols,rename,confirm=event_stock_update(remaining[0])
@@ -768,7 +772,7 @@ def event_stock_delete(event_id,confirmation):
         return "Deleted "+e["name"],gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),gr.update(choices=EVENT_STOCK_DEFAULT_COLUMNS,value="Item"),"",""
     except Exception as exc: return "Could not delete event: "+str(exc),gr.update(),gr.update(),gr.update(),"",""
 
-def event_stock_save(event_id,data):
+def event_stock_save(event_id, data, request: gr.Request = None):
     try:
         e=event_stock_get(event_id)
         if hasattr(data,"values"): data=data.values.tolist()
@@ -776,9 +780,12 @@ def event_stock_save(event_id,data):
         for row in (data or []):
             row=list(row or [])[:len(cols)]; row += [""]*(len(cols)-len(row))
             rows.append(["" if v is None else v for v in row])
-        event_stock_validate_allocations(event_id, cols, rows)
-        supabase.table("event_stock_events").update({"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
-        return "Saved "+str(len(rows))+" row(s) for "+e["name"]+". Event allocations are within main Inventory stock.",gr.update(value=rows,headers=cols)
+        result=supabase.rpc("event_stock_apply", {
+            "p_event_id": int(event_id), "p_rows": rows,
+            "p_actor": authenticated_username(request), "p_delete": False
+        }).execute()
+        message=result.data if isinstance(result.data,str) else "Saved Event Stock and updated main Inventory."
+        return str(message)+" "+str(len(rows))+" row(s).",gr.update(value=rows,headers=cols)
     except Exception as exc: return "Could not save event stock: "+str(exc),gr.update()
 
 def event_stock_add_column(event_id,name):
@@ -875,19 +882,22 @@ def event_stock_chat_write(event_name,item_name,quantity,mode="add",actor=None):
         if "unit" in low: row[low.index("unit")]=item.get("unit") or "pcs"
         rows.append(row)
     old=int(float(row[qi] or 0)); row[qi]=old+qty if mode=="add" else qty
-    event_stock_validate_allocations(e["id"],cols,rows)
-    supabase.table("event_stock_events").update({"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(e["id"])).execute()
-    write_audit(item["name"],"event_allocate" if mode=="add" else "event_set_quantity",old,row[qi],"Event: "+e["name"],actor)
-    return f'Saved {item["name"]} in {e["name"]}: {old} → {row[qi]} {item.get("unit") or "pcs"}. Total allocations across events were validated.'
+    result=supabase.rpc("event_stock_apply", {
+        "p_event_id": int(e["id"]), "p_rows": rows,
+        "p_actor": actor or "Unknown", "p_delete": False
+    }).execute()
+    return f'Saved {item["name"]} in {e["name"]}: {old} → {row[qi]} {item.get("unit") or "pcs"}. Main Inventory was adjusted immediately by the difference.'
 
 def event_stock_chat_delete(event_name,confirmation,actor=None):
     es=[e for e in event_stock_events() if normalized_name(e["name"])==normalized_name(event_name)]
     if len(es)!=1: raise ValueError("Event not found or ambiguous.")
     e=es[0]
     if (confirmation or "").strip()!=e["name"]: raise ValueError("Exact event-name confirmation is required before deletion.")
-    supabase.table("event_stock_events").delete().eq("id",int(e["id"])).execute()
-    write_audit("Event: "+e["name"],"event_delete",note="Deleted Event Stock session",actor=actor)
-    return "Deleted "+e["name"]+". Main Inventory was not changed."
+    result=supabase.rpc("event_stock_apply", {
+        "p_event_id": int(e["id"]), "p_rows": None,
+        "p_actor": actor or "Unknown", "p_delete": True
+    }).execute()
+    return str(result.data or ("Deleted "+e["name"]+". Returned deducted stock to main Inventory."))
 
 TOOLS = [
     {"type": "function", "function": {"name": "calculate_math",
@@ -1021,8 +1031,9 @@ EVENT STOCK MANAGEMENT:
 - Use Event Stock tools to list, view, create, rename, allocate, or change event allocations. View a session before answering about its contents.
 - If event name is missing or ambiguous, list sessions and ask one concise question.
 - Allocate only existing main Inventory items. Changes save immediately and validate combined allocations across all events.
-- "Add/allocate N" increases quantity by N; "set/change to N" sets the exact quantity.
-- Event Stock tracks reserved quantities but does not decrement main Inventory.
+- "Add/allocate N" to an Event Stock session saves immediately and deducts the same quantity from main Inventory.
+- Editing an event quantity deducts or returns only the difference. Deleting an event returns its previously deducted stock.
+- In this chatbot, "add 5 straws" means issue/use 5 and subtract them from main Inventory. Use "increase/receive" to restock.
 - Ask for explicit confirmation before deleting an event. Never infer confirmation.
 - Never invent event names, inventory items, or quantities.
 
@@ -1139,9 +1150,23 @@ def _quick_inventory_reply(user_text, actor=None):
     )
     if match:
         verb, item_name, amount, category = match.groups()
-        delta = int(amount) * (-1 if verb.lower() in ("reduce", "decrease", "subtract", "deduct") else 1)
+        # In this workflow, "add N item(s)" means issue/use N from stock.
+        # Restocking should be expressed as "increase" or "receive".
+        delta = int(amount) * (-1 if verb.lower() in ("reduce", "decrease", "subtract", "deduct", "add") else 1)
         try:
             return adjust_item(item_name.strip(), category.strip() if category else None, delta, actor)
+        except Exception as exc:
+            return f"Stock was not changed: {exc}"
+
+    # Natural phrasing: "add 5 straws" means issue/use 5 from inventory.
+    issue_match = re.fullmatch(
+        r"(?:add|use|consume|issue|take|remove|deduct)\s+(\d+)\s+(.+?)(?:\s+in\s+(.+))?",
+        raw, flags=re.IGNORECASE
+    )
+    if issue_match:
+        amount, item_name, category = issue_match.groups()
+        try:
+            return adjust_item(item_name.strip(), category.strip() if category else None, -int(amount), actor)
         except Exception as exc:
             return f"Stock was not changed: {exc}"
 
@@ -1928,7 +1953,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
 
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
             gr.Markdown("### Event Stock")
-            gr.Markdown("Each event has its own saved sheet. Changes here do not automatically change your main Inventory.")
+            gr.Markdown("Each event has its own saved sheet. Saving an allocation immediately deducts it from main Inventory; reducing or deleting allocations returns the stock.")
             with gr.Row():
                 event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
                 event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Preston Wedding", scale=2)
@@ -1941,13 +1966,13 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 event_delete_confirm = gr.Textbox(label="Type event name to confirm deletion", placeholder="Exact event name")
                 event_delete_button = gr.Button("Delete event", variant="stop")
             gr.Markdown("#### Add stock from main Inventory")
-            gr.Markdown("Select an existing inventory item and quantity. The app checks allocations across every event before accepting them.")
+            gr.Markdown("Select an existing inventory item and quantity. Saving the event deducts it immediately from main Inventory; insufficient stock is rejected.")
             with gr.Row():
                 event_item_picker = gr.Dropdown(label="Inventory item", choices=[], value=None, interactive=True, scale=3)
                 event_item_quantity = gr.Number(label="Quantity", value=1, precision=0, minimum=1, scale=1)
                 event_add_inventory_button = gr.Button("Add to event", variant="primary")
             gr.Markdown("#### Event stock table")
-            gr.Markdown("Edit cells directly if needed, then save. Item and Quantity are protected so stock limits remain enforceable.")
+            gr.Markdown("Edit cells directly if needed, then save. Quantity changes adjust main Inventory by the difference.")
             event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"dynamic"),interactive=True,wrap=False)
             event_save_button = gr.Button("Save event stock", variant="primary")
             with gr.Accordion("Customize event columns", open=False):
