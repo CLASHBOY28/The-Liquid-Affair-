@@ -612,6 +612,101 @@ def add_category(name, actor=None):
 
 EVENT_STOCK_DEFAULT_COLUMNS = ["Item", "Quantity", "Unit", "Notes"]
 
+
+def event_stock_item_choices():
+    records = inventory_records()
+    counts = {}
+    for item in records:
+        key = normalized_name(item.get("name"))
+        counts[key] = counts.get(key, 0) + 1
+    choices = []
+    for item in records:
+        category = (item.get("categories") or {}).get("name") or "Uncategorised"
+        label = f'{item["name"]} — {category} (available: {item.get("quantity", 0)} {item.get("unit") or "pcs"})'
+        if counts[normalized_name(item.get("name"))] == 1:
+            choices.append((label, str(item["id"])))
+    return choices
+
+
+def event_stock_validate_allocations(event_id, columns, rows):
+    lowered = [str(c).strip().casefold() for c in columns]
+    if "item" not in lowered or "quantity" not in lowered:
+        raise ValueError("Keep the Item and Quantity columns so stock limits can be enforced.")
+    inventory = {normalized_name(x["name"]): x for x in inventory_records()}
+    allocated = {}
+    for event in event_stock_events():
+        event_rows = rows if str(event["id"]) == str(event_id) else (event.get("rows") or [])
+        event_cols = [str(c).strip().casefold() for c in (event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)]
+        if "item" not in event_cols or "quantity" not in event_cols:
+            continue
+        ii, qi = event_cols.index("item"), event_cols.index("quantity")
+        for row in event_rows:
+            row = list(row or [])
+            name = str(row[ii]).strip() if ii < len(row) and row[ii] is not None else ""
+            raw_qty = row[qi] if qi < len(row) else ""
+            if not name and (raw_qty is None or str(raw_qty).strip() == ""):
+                continue
+            if not name:
+                raise ValueError("Choose an inventory item for every quantity entered.")
+            key = normalized_name(name)
+            if key not in inventory:
+                raise ValueError(f'"{name}" is not in your main Inventory. Select an existing item.')
+            if raw_qty is None or str(raw_qty).strip() == "":
+                qty = 0
+            else:
+                try:
+                    numeric = float(raw_qty)
+                    qty = int(numeric)
+                except (TypeError, ValueError, OverflowError):
+                    raise ValueError(f'Quantity for "{name}" must be a whole number.')
+                if qty < 0 or numeric != qty:
+                    raise ValueError(f'Quantity for "{name}" must be a non-negative whole number.')
+            allocated[key] = allocated.get(key, 0) + qty
+    for key, total in allocated.items():
+        available = int(inventory[key].get("quantity") or 0)
+        if total > available:
+            item_name = inventory[key]["name"]
+            raise ValueError(f'Not enough stock for "{item_name}". Main Inventory has {available}; {total} is allocated across events. Reduce the total allocation by {total - available} or more.')
+
+
+def event_stock_add_inventory_item(event_id, item_id, quantity, data):
+    try:
+        if not event_id:
+            raise ValueError("Choose or create an event first.")
+        if not item_id:
+            raise ValueError("Select an item from main Inventory.")
+        e = event_stock_get(event_id)
+        cols = e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS
+        lowered = [str(c).strip().casefold() for c in cols]
+        if "item" not in lowered or "quantity" not in lowered:
+            raise ValueError("The event sheet must keep its Item and Quantity columns.")
+        item_rows = supabase.table("inventory_items").select("id,name,quantity,unit").eq("id", int(item_id)).limit(1).execute().data or []
+        if not item_rows:
+            raise ValueError("That inventory item no longer exists.")
+        item = item_rows[0]
+        try:
+            qty = int(quantity)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("Enter a whole-number quantity.")
+        if qty < 1:
+            raise ValueError("Quantity must be at least 1.")
+        if hasattr(data, "values"):
+            data = data.values.tolist()
+        rows = []
+        for row in (data or []):
+            row = list(row or [])[:len(cols)]
+            row += [""] * (len(cols) - len(row))
+            rows.append(["" if v is None else v for v in row])
+        new_row = [""] * len(cols)
+        new_row[lowered.index("item")] = item["name"]
+        new_row[lowered.index("quantity")] = qty
+        rows.append(new_row)
+        event_stock_validate_allocations(event_id, cols, rows)
+        return f'Added {item["name"]} × {qty}. Save event stock to keep the change.', gr.update(value=rows, headers=cols)
+    except Exception as exc:
+        return "Could not add item: " + str(exc), gr.update()
+
+
 def event_stock_events():
     return supabase.table("event_stock_events").select("id,name,columns,rows,created_at").order("created_at",desc=True).execute().data or []
 
@@ -681,8 +776,9 @@ def event_stock_save(event_id,data):
         for row in (data or []):
             row=list(row or [])[:len(cols)]; row += [""]*(len(cols)-len(row))
             rows.append(["" if v is None else v for v in row])
+        event_stock_validate_allocations(event_id, cols, rows)
         supabase.table("event_stock_events").update({"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
-        return "Saved "+str(len(rows))+" row(s) for "+e["name"],gr.update(value=rows,headers=cols)
+        return "Saved "+str(len(rows))+" row(s) for "+e["name"]+". Event allocations are within main Inventory stock.",gr.update(value=rows,headers=cols)
     except Exception as exc: return "Could not save event stock: "+str(exc),gr.update()
 
 def event_stock_add_column(event_id,name):
@@ -699,6 +795,8 @@ def event_stock_rename_column(event_id,old,new):
     try:
         e=event_stock_get(event_id); cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS); new=(new or "").strip()
         if old not in cols or not new: raise ValueError("Choose a column and enter its new name.")
+        if old.strip().casefold() in ("item", "quantity"):
+            raise ValueError("Item and Quantity are required for inventory stock-limit checks; rename other columns instead.")
         if any(c.casefold()==new.casefold() and c!=old for c in cols): raise ValueError("Another column already has that name.")
         cols[cols.index(old)]=new
         supabase.table("event_stock_events").update({"columns":cols,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
@@ -709,6 +807,8 @@ def event_stock_remove_column(event_id,name):
     try:
         e=event_stock_get(event_id); cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)
         if name not in cols: raise ValueError("Choose a column.")
+        if name.strip().casefold() in ("item", "quantity"):
+            raise ValueError("Item and Quantity are required for inventory stock-limit checks.")
         if len(cols)<2: raise ValueError("Keep at least one column.")
         i=cols.index(name); cols.pop(i); rows=[list(r[:i])+list(r[i+1:]) for r in (e.get("rows") or [])]
         supabase.table("event_stock_events").update({"columns":cols,"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
@@ -1720,8 +1820,14 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             with gr.Row():
                 event_delete_confirm = gr.Textbox(label="Type event name to confirm deletion", placeholder="Exact event name")
                 event_delete_button = gr.Button("Delete event", variant="stop")
+            gr.Markdown("#### Add stock from main Inventory")
+            gr.Markdown("Select an existing inventory item and quantity. The app checks allocations across every event before accepting them.")
+            with gr.Row():
+                event_item_picker = gr.Dropdown(label="Inventory item", choices=[], value=None, interactive=True, scale=3)
+                event_item_quantity = gr.Number(label="Quantity", value=1, precision=0, minimum=1, scale=1)
+                event_add_inventory_button = gr.Button("Add to event", variant="primary")
             gr.Markdown("#### Event stock table")
-            gr.Markdown("Edit cells directly. Add rows using the table row control, then save.")
+            gr.Markdown("Edit cells directly if needed, then save. Item and Quantity are protected so stock limits remain enforceable.")
             event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"dynamic"),interactive=True,wrap=False)
             event_save_button = gr.Button("Save event stock", variant="primary")
             with gr.Accordion("Customize event columns", open=False):
@@ -1751,7 +1857,9 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
     demo.load(refresh_all, outputs=refresh_outputs)
     demo.load(event_stock_initial, outputs=[event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm,event_status])
+    demo.load(lambda: gr.update(choices=event_stock_item_choices(), value=None), outputs=[event_item_picker])
     event_selector.change(event_stock_load, inputs=event_selector, outputs=[event_table,event_column_selector,event_rename_name,event_delete_confirm,event_status])
+    event_add_inventory_button.click(event_stock_add_inventory_item, inputs=[event_selector,event_item_picker,event_item_quantity,event_table], outputs=[event_status,event_table])
     event_create_button.click(event_stock_create, inputs=event_new_name, outputs=[event_status,event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm])
     event_rename_button.click(event_stock_rename, inputs=[event_selector,event_rename_name], outputs=[event_status,event_selector,event_rename_name,event_delete_confirm])
     event_delete_button.click(event_stock_delete, inputs=[event_selector,event_delete_confirm], outputs=[event_status,event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm])
