@@ -2,6 +2,8 @@
 -- Run this once in Supabase SQL Editor after deploying the matching app.py.
 alter table event_stock_events
   add column if not exists stock_deducted boolean not null default false;
+alter table inventory_audit
+  add column if not exists actor text;
 
 create or replace function public.event_stock_totals(p_columns jsonb, p_rows jsonb)
 returns table(item_name text, quantity integer)
