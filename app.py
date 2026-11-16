@@ -685,7 +685,7 @@ def event_stock_validate_allocations(event_id, columns, rows):
             raise ValueError(f'Not enough stock for "{item_name}". Main Inventory has {available}; {total} is allocated across events. Reduce the total allocation by {total - available} or more.')
 
 
-def event_stock_add_inventory_item(event_id, item_id, quantity, data):
+def event_stock_add_inventory_item(event_id, item_id, quantity, data, request: gr.Request = None):
     try:
         if not event_id:
             raise ValueError("Choose or create an event first.")
@@ -717,9 +717,12 @@ def event_stock_add_inventory_item(event_id, item_id, quantity, data):
         new_row[lowered.index("item")] = item["name"]
         new_row[lowered.index("quantity")] = qty
         rows.append(new_row)
-        if int(item.get("quantity") or 0) < qty:
-            raise ValueError(f'Not enough stock for "{item["name"]}". Available: {item.get("quantity", 0)}.')
-        return f'Added {item["name"]} × {qty} to the draft. Save event stock to deduct it from main Inventory.', gr.update(value=rows, headers=cols)
+        result = supabase.rpc("event_stock_apply", {
+            "p_event_id": int(event_id), "p_rows": rows,
+            "p_actor": authenticated_username(request), "p_delete": False
+        }).execute()
+        message = result.data if isinstance(result.data, str) else "Saved Event Stock and deducted the quantity from main Inventory."
+        return str(message), gr.update(value=rows, headers=cols)
     except Exception as exc:
         return "Could not add item: " + str(exc), gr.update()
 
