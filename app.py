@@ -594,7 +594,9 @@ def adjust_item(name, category, delta, actor=None):
     old = found["quantity"]
     new = old + int(delta)
     if new < 0:
-        raise ValueError(f"Not enough stock. Current quantity is {old}.")
+        if old == 0:
+            raise ValueError(f"You don't have any {name} in main Inventory. This item is empty.")
+        raise ValueError(f"Not enough stock for {name}. Current quantity is {old}.")
     (supabase.table("inventory_items").update({
         "quantity": new, "updated_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", found["id"]).execute())
@@ -915,7 +917,7 @@ TOOLS = [
          "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
          "required": ["name", "quantity"]}}},
     {"type": "function", "function": {"name": "adjust_stock",
-     "description": "Increase or decrease an existing item's stock by a delta. Category is optional; infer it from saved inventory. Never ask for category when the item name matches one existing inventory item. Ask only if multiple saved items share that name.",
+     "description": "Adjust stock by a delta. Here, add 5 straws means issue/use 5 and subtract from main Inventory; use increase or receive for restocking. Category is optional and inferred when unambiguous.,
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. Omit for an existing item; use its saved category."},
          "delta": {"type": "integer"}},
