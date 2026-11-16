@@ -609,6 +609,113 @@ def add_category(name, actor=None):
     return f"Category '{name.strip().lower()}' is ready."
 
 
+
+EVENT_STOCK_DEFAULT_COLUMNS = ["Item", "Quantity", "Unit", "Notes"]
+
+def event_stock_events():
+    return supabase.table("event_stock_events").select("id,name,columns,rows,created_at").order("created_at",desc=True).execute().data or []
+
+def event_stock_get(event_id):
+    if not event_id: raise ValueError("Choose or create an event first.")
+    rows=supabase.table("event_stock_events").select("id,name,columns,rows").eq("id",int(event_id)).limit(1).execute().data or []
+    if not rows: raise ValueError("Event not found.")
+    return rows[0]
+
+def event_stock_update(e):
+    cols=e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS
+    return gr.update(value=e.get("rows") or [],headers=cols),gr.update(choices=cols,value=cols[0]),e["name"],e["name"]
+
+def event_stock_initial():
+    try:
+        events=event_stock_events()
+        choices=[(e["name"],str(e["id"])) for e in events]
+        if not events:
+            return gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),gr.update(choices=EVENT_STOCK_DEFAULT_COLUMNS,value="Item"),"","","Create your first event."
+        e=events[0]
+        table,cols,rename,confirm=event_stock_update(e)
+        return gr.update(choices=choices,value=str(e["id"])),table,cols,rename,confirm,""
+    except Exception as exc:
+        return gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),gr.update(choices=EVENT_STOCK_DEFAULT_COLUMNS,value="Item"),"","","Setup required: run event_stock_migration.sql in Supabase SQL Editor, then refresh. "+str(exc)
+
+def event_stock_load(event_id):
+    try: return event_stock_update(event_stock_get(event_id))+("",)
+    except Exception as exc: return gr.update(value=[],headers=EVENT_STOCK_DEFAULT_COLUMNS),gr.update(choices=EVENT_STOCK_DEFAULT_COLUMNS,value="Item"),"","","Could not load event: "+str(exc)
+
+def event_stock_create(name):
+    try:
+        name=(name or "").strip()
+        if not name: raise ValueError("Enter an event name.")
+        if any(e["name"].casefold()==name.casefold() for e in event_stock_events()): raise ValueError("An event with that name already exists.")
+        e=supabase.table("event_stock_events").insert({"name":name,"columns":EVENT_STOCK_DEFAULT_COLUMNS,"rows":[["","","",""]]}).execute().data[0]
+        choices=[(x["name"],str(x["id"])) for x in event_stock_events()]
+        table,cols,rename,confirm=event_stock_update(e)
+        return "Created "+name,gr.update(choices=choices,value=str(e["id"])),table,cols,rename,confirm
+    except Exception as exc: return "Could not create event: "+str(exc),gr.update(),gr.update(),gr.update(),"",""
+
+def event_stock_rename(event_id,name):
+    try:
+        e=event_stock_get(event_id); name=(name or "").strip()
+        if not name: raise ValueError("Enter the new event name.")
+        if any(x["name"].casefold()==name.casefold() and x["id"]!=e["id"] for x in event_stock_events()): raise ValueError("Another event already has that name.")
+        supabase.table("event_stock_events").update({"name":name,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
+        return "Renamed event to "+name,gr.update(choices=[(x["name"],str(x["id"])) for x in event_stock_events()],value=str(event_id)),name,name
+    except Exception as exc: return "Could not rename event: "+str(exc),gr.update(),name or "",""
+
+def event_stock_delete(event_id,confirmation):
+    try:
+        e=event_stock_get(event_id)
+        if (confirmation or "").strip()!=e["name"]: raise ValueError("Type the event name exactly to confirm deletion.")
+        supabase.table("event_stock_events").delete().eq("id",int(event_id)).execute()
+        remaining=event_stock_events(); choices=[(x["name"],str(x["id"])) for x in remaining]
+        if remaining:
+            table,cols,rename,confirm=event_stock_update(remaining[0])
+            return "Deleted "+e["name"],gr.update(choices=choices,value=str(remaining[0]["id"])),table,cols,rename,confirm
+        return "Deleted "+e["name"],gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),gr.update(choices=EVENT_STOCK_DEFAULT_COLUMNS,value="Item"),"",""
+    except Exception as exc: return "Could not delete event: "+str(exc),gr.update(),gr.update(),gr.update(),"",""
+
+def event_stock_save(event_id,data):
+    try:
+        e=event_stock_get(event_id)
+        if hasattr(data,"values"): data=data.values.tolist()
+        cols=e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS; rows=[]
+        for row in (data or []):
+            row=list(row or [])[:len(cols)]; row += [""]*(len(cols)-len(row))
+            rows.append(["" if v is None else v for v in row])
+        supabase.table("event_stock_events").update({"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
+        return "Saved "+str(len(rows))+" row(s) for "+e["name"],gr.update(value=rows,headers=cols)
+    except Exception as exc: return "Could not save event stock: "+str(exc),gr.update()
+
+def event_stock_add_column(event_id,name):
+    try:
+        e=event_stock_get(event_id); name=(name or "").strip(); cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)
+        if not name: raise ValueError("Enter a column name.")
+        if any(c.casefold()==name.casefold() for c in cols): raise ValueError("That column already exists.")
+        cols.append(name); rows=[list(r)+[""] for r in (e.get("rows") or [])]
+        supabase.table("event_stock_events").update({"columns":cols,"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
+        return "Added column "+name,gr.update(value=rows,headers=cols),gr.update(choices=cols,value=name)
+    except Exception as exc: return "Could not add column: "+str(exc),gr.update(),gr.update()
+
+def event_stock_rename_column(event_id,old,new):
+    try:
+        e=event_stock_get(event_id); cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS); new=(new or "").strip()
+        if old not in cols or not new: raise ValueError("Choose a column and enter its new name.")
+        if any(c.casefold()==new.casefold() and c!=old for c in cols): raise ValueError("Another column already has that name.")
+        cols[cols.index(old)]=new
+        supabase.table("event_stock_events").update({"columns":cols,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
+        return "Renamed column to "+new,gr.update(value=e.get("rows") or [],headers=cols),gr.update(choices=cols,value=new)
+    except Exception as exc: return "Could not rename column: "+str(exc),gr.update(),gr.update()
+
+def event_stock_remove_column(event_id,name):
+    try:
+        e=event_stock_get(event_id); cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)
+        if name not in cols: raise ValueError("Choose a column.")
+        if len(cols)<2: raise ValueError("Keep at least one column.")
+        i=cols.index(name); cols.pop(i); rows=[list(r[:i])+list(r[i+1:]) for r in (e.get("rows") or [])]
+        supabase.table("event_stock_events").update({"columns":cols,"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(event_id)).execute()
+        return "Removed column "+name,gr.update(value=rows,headers=cols),gr.update(choices=cols,value=cols[0])
+    except Exception as exc: return "Could not remove column: "+str(exc),gr.update(),gr.update()
+
+
 def dashboard_summary():
     records = inventory_records()
     low = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
@@ -1477,6 +1584,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             nav_categories = gr.Button("Categories", variant="secondary", elem_classes=["tla-nav-button"])
             nav_ai = gr.Button("AI Assistant", variant="secondary", elem_classes=["tla-nav-button"])
             nav_history = gr.Button("Stock History", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_event_stock = gr.Button("Event Stock", variant="secondary", elem_classes=["tla-nav-button"])
         with gr.Column(visible=True, elem_classes=["tla-page"]) as dashboard_page:
             summary = gr.Markdown()
             refresh_button = gr.Button("Refresh dashboard")
@@ -1598,6 +1706,33 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             )
             audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
 
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as event_stock_page:
+            gr.Markdown("### Event Stock")
+            gr.Markdown("Each event has its own saved sheet. Changes here do not automatically change your main Inventory.")
+            with gr.Row():
+                event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
+                event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Preston Wedding", scale=2)
+                event_create_button = gr.Button("Add event", variant="primary")
+            event_status = gr.Markdown()
+            with gr.Row():
+                event_rename_name = gr.Textbox(label="Rename selected event")
+                event_rename_button = gr.Button("Rename event")
+            with gr.Row():
+                event_delete_confirm = gr.Textbox(label="Type event name to confirm deletion", placeholder="Exact event name")
+                event_delete_button = gr.Button("Delete event", variant="stop")
+            gr.Markdown("#### Event stock table")
+            gr.Markdown("Edit cells directly. Add rows using the table row control, then save.")
+            event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False)
+            event_save_button = gr.Button("Save event stock", variant="primary")
+            with gr.Accordion("Customize event columns", open=False):
+                event_column_name = gr.Textbox(label="New column name", placeholder="e.g. Issued to")
+                event_add_column_button = gr.Button("Add column")
+                event_column_selector = gr.Dropdown(label="Select column", choices=EVENT_STOCK_DEFAULT_COLUMNS, value="Item")
+                with gr.Row():
+                    event_column_new_name = gr.Textbox(label="New column heading")
+                    event_rename_column_button = gr.Button("Rename column")
+                event_remove_column_button = gr.Button("Remove selected column", variant="stop")
+
     page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page]
     page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history]
 
@@ -1616,6 +1751,15 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
 
     refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
     demo.load(refresh_all, outputs=refresh_outputs)
+    demo.load(event_stock_initial, outputs=[event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm,event_status])
+    event_selector.change(event_stock_load, inputs=event_selector, outputs=[event_table,event_column_selector,event_rename_name,event_delete_confirm,event_status])
+    event_create_button.click(event_stock_create, inputs=event_new_name, outputs=[event_status,event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm])
+    event_rename_button.click(event_stock_rename, inputs=[event_selector,event_rename_name], outputs=[event_status,event_selector,event_rename_name,event_delete_confirm])
+    event_delete_button.click(event_stock_delete, inputs=[event_selector,event_delete_confirm], outputs=[event_status,event_selector,event_table,event_column_selector,event_rename_name,event_delete_confirm])
+    event_save_button.click(event_stock_save, inputs=[event_selector,event_table], outputs=[event_status,event_table])
+    event_add_column_button.click(event_stock_add_column, inputs=[event_selector,event_column_name], outputs=[event_status,event_table,event_column_selector])
+    event_rename_column_button.click(event_stock_rename_column, inputs=[event_selector,event_column_selector,event_column_new_name], outputs=[event_status,event_table,event_column_selector])
+    event_remove_column_button.click(event_stock_remove_column, inputs=[event_selector,event_column_selector], outputs=[event_status,event_table,event_column_selector])
     refresh_button.click(refresh_all, outputs=refresh_outputs)
     save_button.click(
         add_item_ui,
