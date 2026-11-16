@@ -2379,14 +2379,73 @@ APP_CSS += r"""
     gap: 9px !important;
   }
   .gradio-container .inventory-page .tla-mobile-card {
-    min-width: 0 !important;
-    padding: 11px !important;
-    border-radius: 13px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    justify-content:space-between !important;
+    min-width:0 !important;
+    min-height:138px !important;
+    padding:10px !important;
+    border:1px solid color-mix(in srgb,var(--tla-gold) 32%,transparent) !important;
+    border-radius:13px !important;
+    background:linear-gradient(155deg,color-mix(in srgb,var(--tla-panel) 96%,white 2%),var(--tla-bg)) !important;
+    box-shadow:0 3px 10px rgba(0,0,0,.14) !important;
+    overflow-wrap:anywhere !important;
   }
-  .gradio-container .inventory-page .tla-card-top h3 { font-size: 13px !important; }
-  .gradio-container .inventory-page .tla-card-metrics { gap: 7px !important; margin: 9px 0 7px !important; }
-  .gradio-container .inventory-page .tla-card-metrics div { padding: 8px !important; }
-  .gradio-container .inventory-page .tla-card-metrics strong { font-size: 14px !important; }
+  .gradio-container .inventory-page .tla-card-top {
+    display:flex !important;
+    align-items:flex-start !important;
+    justify-content:space-between !important;
+    gap:6px !important;
+    min-width:0 !important;
+  }
+  .gradio-container .inventory-page .tla-card-top > div { min-width:0 !important; }
+  .gradio-container .inventory-page .tla-card-top h3 {
+    margin:0 0 3px !important;
+    font-size:12px !important;
+    line-height:1.2 !important;
+    overflow-wrap:anywhere !important;
+  }
+  .gradio-container .inventory-page .tla-card-top p {
+    margin:0 !important;
+    font-size:10px !important;
+    line-height:1.2 !important;
+  }
+  .gradio-container .inventory-page .tla-stock-pill {
+    flex:0 0 auto !important;
+    max-width:78px !important;
+    padding:3px 6px !important;
+    font-size:9px !important;
+    line-height:1.15 !important;
+    white-space:normal !important;
+  }
+  .gradio-container .inventory-page .tla-card-metrics {
+    display:grid !important;
+    grid-template-columns:1fr 1fr !important;
+    gap:6px !important;
+    margin:8px 0 6px !important;
+  }
+  .gradio-container .inventory-page .tla-card-metrics div {
+    min-width:0 !important;
+    padding:7px !important;
+    border-radius:9px !important;
+  }
+  .gradio-container .inventory-page .tla-card-metrics small {
+    display:block !important;
+    font-size:9px !important;
+    line-height:1.15 !important;
+  }
+  .gradio-container .inventory-page .tla-card-metrics strong {
+    display:block !important;
+    font-size:12px !important;
+    line-height:1.2 !important;
+    overflow-wrap:anywhere !important;
+  }
+  .gradio-container .inventory-page .tla-card-foot {
+    margin:0 !important;
+    font-size:9px !important;
+    line-height:1.2 !important;
+    opacity:.82 !important;
+  }
 }
 """
 
