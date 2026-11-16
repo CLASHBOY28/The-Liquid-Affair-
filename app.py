@@ -1722,7 +1722,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 event_delete_button = gr.Button("Delete event", variant="stop")
             gr.Markdown("#### Event stock table")
             gr.Markdown("Edit cells directly. Add rows using the table row control, then save.")
-            event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False)
+            event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"dynamic"),interactive=True,wrap=False)
             event_save_button = gr.Button("Save event stock", variant="primary")
             with gr.Accordion("Customize event columns", open=False):
                 event_column_name = gr.Textbox(label="New column name", placeholder="e.g. Issued to")
