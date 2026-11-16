@@ -2265,33 +2265,85 @@ APP_CSS += r"""
 }
 
 
-/* Inventory mobile: six inputs, six full-width rows. */
+/* Complete mobile inventory redesign: compact cards, forms and stock controls. */
 @media (max-width: 760px) {
-  .gradio-container .inventory-page .inventory-mobile-stack {
+  .gradio-container .inventory-page {
+    padding: 10px !important;
+    gap: 10px !important;
+    font-size: 13px !important;
+  }
+  .gradio-container .inventory-page h3,
+  .gradio-container .inventory-page h4 {
+    font-size: 15px !important;
+    line-height: 1.25 !important;
+    margin: 3px 0 7px !important;
+  }
+  .gradio-container .inventory-page .row {
     display: flex !important;
-    flex-direction: column !important;
-    flex-wrap: nowrap !important;
-    align-items: stretch !important;
-    gap: 14px !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
     width: 100% !important;
     min-width: 0 !important;
   }
-  .gradio-container .inventory-page .inventory-mobile-stack > * {
-    display: flex !important;
-    flex: 0 0 auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
+  .gradio-container .inventory-page .row > * {
+    flex: 1 1 calc(50% - 8px) !important;
+    width: calc(50% - 8px) !important;
+    max-width: calc(50% - 8px) !important;
     min-width: 0 !important;
     margin: 0 !important;
     box-sizing: border-box !important;
   }
-  .gradio-container .inventory-page .inventory-mobile-stack > * .wrap,
-  .gradio-container .inventory-page .inventory-mobile-stack > * input,
-  .gradio-container .inventory-page .inventory-mobile-stack > * [role="combobox"] {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
+  .gradio-container .inventory-page .info {
+    display: none !important;
+  }
+  .gradio-container .inventory-page label {
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    margin-bottom: 4px !important;
+  }
+  .gradio-container .inventory-page input,
+  .gradio-container .inventory-page textarea,
+  .gradio-container .inventory-page [role="combobox"] {
+    min-height: 40px !important;
+    height: 40px !important;
+    padding: 6px 8px !important;
+    font-size: 13px !important;
+    line-height: 1.2 !important;
     box-sizing: border-box !important;
+  }
+  .gradio-container .inventory-page button {
+    min-height: 40px !important;
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    white-space: normal !important;
+  }
+  .gradio-container .inventory-page .inventory-table-section {
+    padding: 9px !important;
+    border-radius: 12px !important;
+  }
+  .gradio-container .inventory-page .inventory-table-intro {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+  .gradio-container .inventory-page .mobile-only {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .gradio-container .inventory-page .mobile-only > * {
+    margin-bottom: 8px !important;
+  }
+  .gradio-container .inventory-page .inventory-mobile-stack {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .gradio-container .inventory-page .inventory-mobile-stack > * {
+    flex: 1 1 calc(50% - 8px) !important;
+    width: calc(50% - 8px) !important;
+    max-width: calc(50% - 8px) !important;
   }
 }
 """
