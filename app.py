@@ -1936,7 +1936,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 move_field_button = gr.Button("Move column")
                 remove_field_button = gr.Button("Remove column", variant="stop")
         with gr.Column(visible=False, elem_classes=["tla-page"]) as ai_page:
-            with gr.Row(equal_height=True):
+            with gr.Row(equal_height=True, elem_classes=["tla-ai-header-row"]):
                 gr.Markdown("### 🤖 AI Assistant", scale=2)
                 provider_selector = gr.Dropdown(
                     choices=[
@@ -2092,3 +2092,130 @@ if __name__ == "__main__":
     )
 
 # Mobile navigation layout update: tabs remain visible on narrow screens.
+
+/* Responsive interface refresh: fixes compressed navigation, AI controls and chat layout. */
+.gradio-container {
+  max-width: 1360px !important;
+}
+.tla-app-shell {
+  max-width: 1240px !important;
+  margin: 0 auto !important;
+  gap: 18px !important;
+}
+.tla-mobile-nav {
+  display: grid !important;
+  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  padding: 8px !important;
+  border: 1px solid color-mix(in srgb,var(--tla-gold) 24%,transparent) !important;
+  border-radius: 16px !important;
+  background: color-mix(in srgb,var(--tla-panel) 92%,transparent) !important;
+}
+.tla-nav-button {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 44px !important;
+  padding: 9px 10px !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+  overflow-wrap: normal !important;
+}
+.tla-page {
+  max-width: 100% !important;
+  padding: clamp(12px, 1.8vw, 22px) !important;
+  border: 1px solid color-mix(in srgb,var(--tla-gold) 22%,transparent) !important;
+  border-radius: 18px !important;
+  background: color-mix(in srgb,var(--tla-panel) 48%,transparent) !important;
+}
+.tla-ai-header-row {
+  align-items: center !important;
+  gap: 16px !important;
+}
+.tla-ai-header-row > * {
+  min-width: 0 !important;
+}
+.tla-page .chatbot,
+.tla-page [data-testid="chatbot"] {
+  min-width: 0 !important;
+  border-radius: 16px !important;
+}
+.tla-page .chatbot {
+  height: min(58vh, 560px) !important;
+  min-height: 340px !important;
+}
+.tla-subtitle {
+  max-width: 850px !important;
+}
+@media (min-width: 761px) {
+  .tla-mobile-nav { grid-template-columns: repeat(6, minmax(110px, 1fr)) !important; }
+  .tla-page { padding: 22px !important; }
+  .tla-ai-header-row { flex-direction: row !important; }
+}
+@media (max-width: 760px) {
+  .gradio-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 10px 10px calc(22px + env(safe-area-inset-bottom)) !important;
+  }
+  .tla-app-shell { gap: 12px !important; }
+  /* Keep navigation readable: two rows instead of six crushed buttons. */
+  .gradio-container .row.tla-mobile-nav {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-auto-rows: minmax(48px, auto) !important;
+    gap: 7px !important;
+    padding: 8px !important;
+    overflow: visible !important;
+  }
+  .gradio-container .row.tla-mobile-nav > * {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: initial !important;
+  }
+  .gradio-container .row.tla-mobile-nav button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 48px !important;
+    padding: 8px 5px !important;
+    font-size: 12px !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .tla-page {
+    padding: 12px 10px !important;
+    border-radius: 15px !important;
+  }
+  .tla-ai-header-row {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .tla-ai-header-row > * {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+  .tla-ai-header-row h3,
+  .tla-ai-header-row h2 { margin: 0 !important; }
+  .tla-page .chatbot {
+    height: min(52vh, 480px) !important;
+    min-height: 300px !important;
+  }
+  .tla-page .chatbot .message-wrap { font-size: 14px !important; }
+  .gradio-container .block { padding: 11px !important; }
+  .gradio-container .dataframe-container { overflow-x: auto !important; }
+}
+@media (max-width: 390px) {
+  .tla-nav-button,
+  .gradio-container .row.tla-mobile-nav button {
+    font-size: 11px !important;
+    padding-left: 3px !important;
+    padding-right: 3px !important;
+  }
+}
