@@ -1733,13 +1733,12 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     event_rename_column_button = gr.Button("Rename column")
                 event_remove_column_button = gr.Button("Remove selected column", variant="stop")
 
-    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page]
-    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history]
+    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, event_stock_page]
+    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_event_stock]
 
     def select_page(selected):
-        names = ["Dashboard", "Inventory", "Categories", "AI Assistant", "Stock History"]
-        visibility = [gr.update(visible=(index == selected)) for index in range(5)]
-        styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(5)]
+        visibility = [gr.update(visible=(index == selected)) for index in range(6)]
+        styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(6)]
         return visibility + styles
 
     for index, nav_button in enumerate(page_buttons):
