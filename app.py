@@ -934,7 +934,7 @@ TOOLS = [
          "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
          "required": ["name", "quantity"]}}},
     {"type": "function", "function": {"name": "adjust_stock",
-     "description": "Adjust stock by a delta. Here, add 5 straws means issue/use 5 and subtract from main Inventory; use increase or receive for restocking. Category is optional and inferred when unambiguous.,
+     "description": "Adjust stock by a delta. Here, add 5 straws means issue/use 5 and subtract from main Inventory; use increase or receive for restocking. Category is optional and inferred when unambiguous.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. Omit for an existing item; use its saved category."},
          "delta": {"type": "integer"}},
