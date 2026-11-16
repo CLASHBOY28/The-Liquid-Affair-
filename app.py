@@ -1438,7 +1438,7 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 .gradio-container button { min-height:44px !important; border-radius:11px !important; font-weight:650 !important; touch-action:manipulation; }
 /* Desktop controls: compact but still comfortably clickable. Keep mobile touch targets unchanged. */
 @media (min-width: 761px) {
-  .gradio-container button:not([role="tab"]):not(.tla-nav-button) {
+  .gradio-container button:not([role="tab"]) {
     min-height:36px !important;
     height:auto !important;
     padding:8px 14px !important;
