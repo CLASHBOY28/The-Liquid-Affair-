@@ -583,7 +583,21 @@ def adjust_item(name, category, delta, actor=None):
     if not category:
         category = suggest_category_for_item(name)
     if not category:
-        raise ValueError(f"I couldn't identify a unique category for {name}. Please select its category.")
+        matches = [
+            record for record in inventory_records()
+            if normalized_name(record.get("name")) == normalized_name(name)
+        ]
+        if not matches:
+            raise ValueError(f"{name} is not in your main Inventory.")
+        matched_categories = unique_labels(
+            (record.get("categories") or {}).get("name") for record in matches
+        )
+        if len(matched_categories) > 1:
+            raise ValueError(f"{name} exists in multiple categories. Please select the correct category.")
+        if matched_categories:
+            category = matched_categories[0]
+        else:
+            raise ValueError(f"I couldn't identify a unique category for {name}. Please select its category.")
     cat_id = category_id_for(category, create=False)
     if cat_id is None:
         raise ValueError(f"Category '{category}' does not exist.")
