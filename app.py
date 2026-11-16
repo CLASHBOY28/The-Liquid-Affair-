@@ -832,6 +832,63 @@ def dashboard_summary():
     )
 
 
+
+def event_stock_chat_list():
+    return json.dumps([{"id":e["id"],"name":e["name"],"items":len(e.get("rows") or [])} for e in event_stock_events()],default=str)
+
+def event_stock_chat_view(event_name):
+    found=[e for e in event_stock_events() if normalized_name(e.get("name"))==normalized_name(event_name)]
+    if len(found)!=1: raise ValueError("Event not found or ambiguous. List Event Stock sessions.")
+    e=found[0]
+    return json.dumps({"event":e["name"],"columns":e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS,"rows":e.get("rows") or []},default=str)
+
+def event_stock_chat_create(event_name,actor=None):
+    r=event_stock_create(event_name)
+    if not r or not str(r[0]).startswith("Created "): raise ValueError(r[0] if r else "Create failed.")
+    write_audit("Event: "+event_name,"event_create",note="Created Event Stock session",actor=actor)
+    return r[0]
+
+def event_stock_chat_rename(event_name,new_name,actor=None):
+    es=[e for e in event_stock_events() if normalized_name(e["name"])==normalized_name(event_name)]
+    if len(es)!=1: raise ValueError("Event not found or ambiguous.")
+    r=event_stock_rename(es[0]["id"],new_name)
+    if not str(r[0]).startswith("Renamed "): raise ValueError(r[0])
+    write_audit("Event: "+new_name,"event_rename",note="Renamed from "+event_name,actor=actor)
+    return r[0]
+
+def event_stock_chat_write(event_name,item_name,quantity,mode="add",actor=None):
+    es=[e for e in event_stock_events() if normalized_name(e["name"])==normalized_name(event_name)]
+    if len(es)!=1: raise ValueError("Event not found or ambiguous.")
+    e=es[0]; qty=int(quantity)
+    if qty<0 or (mode=="add" and qty<1): raise ValueError("Enter a valid non-negative whole quantity.")
+    items=[x for x in inventory_records() if normalized_name(x.get("name"))==normalized_name(item_name)]
+    if len(items)!=1: raise ValueError("Inventory item not found or its name is ambiguous across categories.")
+    item=items[0]; cols=list(e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS); low=[str(c).strip().casefold() for c in cols]
+    if "item" not in low or "quantity" not in low: raise ValueError("Event sheet must retain Item and Quantity columns.")
+    ii,qi=low.index("item"),low.index("quantity")
+    rows=[list(r or [])[:len(cols)]+[""]*max(0,len(cols)-len(r or [])) for r in (e.get("rows") or [])]
+    hits=[r for r in rows if normalized_name(str(r[ii] or ""))==normalized_name(item["name"])]
+    if len(hits)>1: raise ValueError("This item appears more than once in the event. Fix duplicate rows in Event Stock first.")
+    if hits: row=hits[0]
+    else:
+        row=[""]*len(cols); row[ii]=item["name"]
+        if "unit" in low: row[low.index("unit")]=item.get("unit") or "pcs"
+        rows.append(row)
+    old=int(float(row[qi] or 0)); row[qi]=old+qty if mode=="add" else qty
+    event_stock_validate_allocations(e["id"],cols,rows)
+    supabase.table("event_stock_events").update({"rows":rows,"updated_at":datetime.now(timezone.utc).isoformat()}).eq("id",int(e["id"])).execute()
+    write_audit(item["name"],"event_allocate" if mode=="add" else "event_set_quantity",old,row[qi],"Event: "+e["name"],actor)
+    return f'Saved {item["name"]} in {e["name"]}: {old} → {row[qi]} {item.get("unit") or "pcs"}. Total allocations across events were validated.'
+
+def event_stock_chat_delete(event_name,confirmation,actor=None):
+    es=[e for e in event_stock_events() if normalized_name(e["name"])==normalized_name(event_name)]
+    if len(es)!=1: raise ValueError("Event not found or ambiguous.")
+    e=es[0]
+    if (confirmation or "").strip()!=e["name"]: raise ValueError("Exact event-name confirmation is required before deletion.")
+    supabase.table("event_stock_events").delete().eq("id",int(e["id"])).execute()
+    write_audit("Event: "+e["name"],"event_delete",note="Deleted Event Stock session",actor=actor)
+    return "Deleted "+e["name"]+". Main Inventory was not changed."
+
 TOOLS = [
     {"type": "function", "function": {"name": "calculate_math",
      "description": "Accurately calculate arithmetic. Use for all numerical calculations rather than mental arithmetic. Supports parentheses and +, -, *, /, //, %, and **. Pass only a mathematical expression, e.g. (250*3)+18 or 500*0.18.",
@@ -862,6 +919,14 @@ TOOLS = [
     {"type": "function", "function": {"name": "add_category",
      "description": "Create an inventory category.", "parameters": {
          "type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
+
+    {"type":"function","function":{"name":"list_event_stock_sessions","description":"List saved Event Stock sessions.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
+    {"type":"function","function":{"name":"view_event_stock","description":"View a saved Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"}},"required":["event_name"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"create_event_stock_session","description":"Create an Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"}},"required":["event_name"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"rename_event_stock_session","description":"Rename an Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"new_name":{"type":"string"}},"required":["event_name","new_name"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"allocate_event_stock","description":"Add quantity of a main Inventory item to an event; saves immediately and checks allocations across all events.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"item_name":{"type":"string"},"quantity":{"type":"integer","minimum":1}},"required":["event_name","item_name","quantity"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"set_event_stock_quantity","description":"Set exact quantity of an item in an event; saves immediately and checks allocations across all events.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"item_name":{"type":"string"},"quantity":{"type":"integer","minimum":0}},"required":["event_name","item_name","quantity"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"delete_event_stock_session","description":"Delete an event only after explicit user confirmation; pass the exact event name as confirmation.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"confirmation":{"type":"string"}},"required":["event_name","confirmation"],"additionalProperties":False}}},
     {"type": "function", "function": {"name": "list_categories",
      "description": "List all inventory categories.",
      "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
@@ -887,6 +952,13 @@ def execute_tool(name: str, args: dict[str, Any], actor=None) -> str:
             return add_category(args["name"], actor)
         if name == "list_categories":
             return json.dumps(categories_list(), default=str)
+        if name == "list_event_stock_sessions": return event_stock_chat_list()
+        if name == "view_event_stock": return event_stock_chat_view(args["event_name"])
+        if name == "create_event_stock_session": return event_stock_chat_create(args["event_name"], actor)
+        if name == "rename_event_stock_session": return event_stock_chat_rename(args["event_name"], args["new_name"], actor)
+        if name == "allocate_event_stock": return event_stock_chat_write(args["event_name"], args["item_name"], args["quantity"], "add", actor)
+        if name == "set_event_stock_quantity": return event_stock_chat_write(args["event_name"], args["item_name"], args["quantity"], "set", actor)
+        if name == "delete_event_stock_session": return event_stock_chat_delete(args["event_name"], args["confirmation"], actor)
         return "Unknown inventory action."
     except Exception as exc:
         return f"ERROR: {type(exc).__name__}: {exc}"
@@ -944,6 +1016,15 @@ CHAT LIKE A GENERAL-PURPOSE AI ASSISTANT:
   is missing.
 - Be concise by default, but explain thoroughly when asked.
 - Never claim to have checked live information unless a tool actually checked it.
+
+EVENT STOCK MANAGEMENT:
+- Use Event Stock tools to list, view, create, rename, allocate, or change event allocations. View a session before answering about its contents.
+- If event name is missing or ambiguous, list sessions and ask one concise question.
+- Allocate only existing main Inventory items. Changes save immediately and validate combined allocations across all events.
+- "Add/allocate N" increases quantity by N; "set/change to N" sets the exact quantity.
+- Event Stock tracks reserved quantities but does not decrement main Inventory.
+- Ask for explicit confirmation before deleting an event. Never infer confirmation.
+- Never invent event names, inventory items, or quantities.
 
 INVENTORY AND BUSINESS DATA:
 - Use the supplied tools whenever the user asks to look up or change live inventory.
