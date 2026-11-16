@@ -2265,86 +2265,89 @@ APP_CSS += r"""
 }
 
 
-/* Complete mobile inventory redesign: compact cards, forms and stock controls. */
+/* Mobile-only inventory cards and grouped form panels. */
 @media (max-width: 760px) {
   .gradio-container .inventory-page {
-    padding: 10px !important;
-    gap: 10px !important;
-    font-size: 13px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 8px !important;
   }
-  .gradio-container .inventory-page h3,
-  .gradio-container .inventory-page h4 {
-    font-size: 15px !important;
-    line-height: 1.25 !important;
-    margin: 3px 0 7px !important;
-  }
-  .gradio-container .inventory-page .row {
+  .gradio-container .inventory-page .inventory-mobile-stack,
+  .gradio-container .inventory-page > .row:not(.inventory-mobile-stack) {
     display: flex !important;
     flex-direction: row !important;
     flex-wrap: wrap !important;
-    align-items: flex-start !important;
-    gap: 8px !important;
+    align-items: stretch !important;
+    gap: 9px !important;
     width: 100% !important;
-    min-width: 0 !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
+    border: 1px solid color-mix(in srgb,var(--tla-gold) 30%,transparent) !important;
+    border-radius: 14px !important;
+    background: color-mix(in srgb,var(--tla-panel) 94%,#fff 2%) !important;
   }
-  .gradio-container .inventory-page .row > * {
-    flex: 1 1 calc(50% - 8px) !important;
-    width: calc(50% - 8px) !important;
-    max-width: calc(50% - 8px) !important;
+  .gradio-container .inventory-page .inventory-mobile-stack > * {
+    flex: 1 1 calc(50% - 9px) !important;
+    width: calc(50% - 9px) !important;
+    max-width: calc(50% - 9px) !important;
     min-width: 0 !important;
     margin: 0 !important;
-    box-sizing: border-box !important;
   }
-  .gradio-container .inventory-page .info {
-    display: none !important;
-  }
-  .gradio-container .inventory-page label {
-    font-size: 11px !important;
-    line-height: 1.2 !important;
-    margin-bottom: 4px !important;
-  }
-  .gradio-container .inventory-page input,
-  .gradio-container .inventory-page textarea,
-  .gradio-container .inventory-page [role="combobox"] {
-    min-height: 40px !important;
-    height: 40px !important;
-    padding: 6px 8px !important;
-    font-size: 13px !important;
-    line-height: 1.2 !important;
-    box-sizing: border-box !important;
-  }
-  .gradio-container .inventory-page button {
-    min-height: 40px !important;
-    padding: 8px 10px !important;
-    font-size: 12px !important;
-    line-height: 1.2 !important;
-    white-space: normal !important;
+  .gradio-container .inventory-page > .row:not(.inventory-mobile-stack) > * {
+    flex: 1 1 calc(50% - 9px) !important;
+    width: calc(50% - 9px) !important;
+    max-width: calc(50% - 9px) !important;
+    min-width: 0 !important;
   }
   .gradio-container .inventory-page .inventory-table-section {
-    padding: 9px !important;
-    border-radius: 12px !important;
+    padding: 11px !important;
+    border-radius: 14px !important;
+    border: 1px solid color-mix(in srgb,var(--tla-gold) 30%,transparent) !important;
   }
   .gradio-container .inventory-page .inventory-table-intro {
     font-size: 12px !important;
     line-height: 1.35 !important;
   }
+  .gradio-container .inventory-page label {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    margin-bottom: 4px !important;
+  }
+  .gradio-container .inventory-page input,
+  .gradio-container .inventory-page textarea,
+  .gradio-container .inventory-page [role="combobox"] {
+    min-height: 42px !important;
+    height: 42px !important;
+    padding: 7px 9px !important;
+    font-size: 13px !important;
+    box-sizing: border-box !important;
+  }
+  .gradio-container .inventory-page button {
+    min-height: 42px !important;
+    padding: 9px 12px !important;
+    font-size: 12px !important;
+    white-space: normal !important;
+  }
+  .gradio-container .inventory-page .info { display: none !important; }
   .gradio-container .inventory-page .mobile-only {
     width: 100% !important;
     min-width: 0 !important;
   }
-  .gradio-container .inventory-page .mobile-only > * {
-    margin-bottom: 8px !important;
+  .gradio-container .inventory-page .tla-mobile-card-list {
+    display: grid !important;
+    grid-template-columns: repeat(2,minmax(0,1fr)) !important;
+    gap: 9px !important;
   }
-  .gradio-container .inventory-page .inventory-mobile-stack {
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    gap: 8px !important;
+  .gradio-container .inventory-page .tla-mobile-card {
+    min-width: 0 !important;
+    padding: 11px !important;
+    border-radius: 13px !important;
   }
-  .gradio-container .inventory-page .inventory-mobile-stack > * {
-    flex: 1 1 calc(50% - 8px) !important;
-    width: calc(50% - 8px) !important;
-    max-width: calc(50% - 8px) !important;
-  }
+  .gradio-container .inventory-page .tla-card-top h3 { font-size: 13px !important; }
+  .gradio-container .inventory-page .tla-card-metrics { gap: 7px !important; margin: 9px 0 7px !important; }
+  .gradio-container .inventory-page .tla-card-metrics div { padding: 8px !important; }
+  .gradio-container .inventory-page .tla-card-metrics strong { font-size: 14px !important; }
 }
 """
 
