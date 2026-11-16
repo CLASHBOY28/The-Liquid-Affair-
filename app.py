@@ -2201,14 +2201,69 @@ APP_CSS += r"""
   .gradio-container .block { padding: 11px !important; }
   .gradio-container .dataframe-container { overflow-x: auto !important; }
 }
-@media (max-width: 390px) {
-  .tla-nav-button,
-  .gradio-container .row.tla-mobile-nav button {
-    font-size: 11px !important;
-    padding-left: 3px !important;
-    padding-right: 3px !important;
+
+/* Final navigation fix: prevent tab labels from overflowing or colliding. */
+.tla-mobile-nav,
+.gradio-container .row.tla-mobile-nav {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.gradio-container .row.tla-mobile-nav > *,
+.tla-mobile-nav > * {
+  flex: 1 1 calc(16.666% - 8px) !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+.tla-mobile-nav button,
+.gradio-container .row.tla-mobile-nav button,
+.gradio-container .row.tla-mobile-nav > * button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 56px !important;
+  height: auto !important;
+  padding: 9px 6px !important;
+  font-size: clamp(11px, 1vw, 14px) !important;
+  line-height: 1.2 !important;
+  text-align: center !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  box-sizing: border-box !important;
+}
+.tla-mobile-nav button *,
+.gradio-container .row.tla-mobile-nav button * {
+  max-width: 100% !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  text-align: center !important;
+}
+@media (max-width: 760px) {
+  .gradio-container .row.tla-mobile-nav > *,
+  .tla-mobile-nav > * {
+    flex-basis: calc(33.333% - 8px) !important;
+  }
+  .tla-mobile-nav button,
+  .gradio-container .row.tla-mobile-nav button,
+  .gradio-container .row.tla-mobile-nav > * button {
+    min-height: 52px !important;
+    padding: 8px 5px !important;
+    font-size: 12px !important;
   }
 }
+
 """
 
 if __name__ == "__main__":
