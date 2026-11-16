@@ -1675,6 +1675,21 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
     display:none !important;
   }
 }
+/* Event Stock desktop controls: scoped compact sizing */
+@media (min-width: 761px) {
+  .gradio-container .event-stock-page button,
+  .gradio-container .event-stock-page button span {
+    font-size:13px !important;
+    line-height:1.2 !important;
+  }
+  .gradio-container .event-stock-page button {
+    min-height:36px !important;
+    height:auto !important;
+    padding:7px 12px !important;
+    width:auto !important;
+    max-width:100% !important;
+  }
+}
 """
 
 
@@ -1818,7 +1833,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             )
             audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
 
-        with gr.Column(visible=False, elem_classes=["tla-page"]) as event_stock_page:
+        with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
             gr.Markdown("### Event Stock")
             gr.Markdown("Each event has its own saved sheet. Changes here do not automatically change your main Inventory.")
             with gr.Row():
