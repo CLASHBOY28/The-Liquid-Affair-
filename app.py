@@ -1860,13 +1860,13 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
         with gr.Column(visible=False, elem_classes=["tla-page", "inventory-page"]) as inventory_page:
             gr.Markdown("#### Add item or set its exact stock")
-            with gr.Row():
+            with gr.Row(elem_classes=["inventory-mobile-stack"]):
                 item_name = gr.Dropdown(
                     label="Item name", choices=[], allow_custom_value=True, filterable=True,
                     info="Choose an existing item or type a new name.",
                 )
                 item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
-            with gr.Row():
+            with gr.Row(elem_classes=["inventory-mobile-stack"]):
                 item_quantity = gr.Number(
                     label="Exact quantity", value=0, precision=0,
                     info="The total amount currently in stock for this item type.",
@@ -2265,22 +2265,18 @@ APP_CSS += r"""
 }
 
 
-/* Inventory page: mobile form fields stack at full width for readable labels and controls. */
+/* Inventory mobile: six inputs, six full-width rows. */
 @media (max-width: 760px) {
-  .gradio-container .inventory-page {
-    gap: 14px !important;
-    padding: 14px 12px !important;
-  }
-  .gradio-container .inventory-page .row {
+  .gradio-container .inventory-page .inventory-mobile-stack {
     display: flex !important;
     flex-direction: column !important;
     flex-wrap: nowrap !important;
     align-items: stretch !important;
-    gap: 12px !important;
+    gap: 14px !important;
     width: 100% !important;
     min-width: 0 !important;
   }
-  .gradio-container .inventory-page .row > * {
+  .gradio-container .inventory-page .inventory-mobile-stack > * {
     display: flex !important;
     flex: 0 0 auto !important;
     width: 100% !important;
@@ -2289,35 +2285,15 @@ APP_CSS += r"""
     margin: 0 !important;
     box-sizing: border-box !important;
   }
-  .gradio-container .inventory-page .row > * .wrap,
-  .gradio-container .inventory-page .row > * .container,
-  .gradio-container .inventory-page .row > * input,
-  .gradio-container .inventory-page .row > * textarea,
-  .gradio-container .inventory-page .row > * button,
-  .gradio-container .inventory-page .row > * [role="combobox"] {
+  .gradio-container .inventory-page .inventory-mobile-stack > * .wrap,
+  .gradio-container .inventory-page .inventory-mobile-stack > * input,
+  .gradio-container .inventory-page .inventory-mobile-stack > * [role="combobox"] {
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
     box-sizing: border-box !important;
   }
-  .gradio-container .inventory-page label {
-    line-height: 1.3 !important;
-    overflow-wrap: anywhere !important;
-  }
-  .gradio-container .inventory-page .info,
-  .gradio-container .inventory-page .wrap .info {
-    max-width: 100% !important;
-    white-space: normal !important;
-    overflow-wrap: anywhere !important;
-    line-height: 1.4 !important;
-  }
-  .gradio-container .inventory-page input,
-  .gradio-container .inventory-page textarea,
-  .gradio-container .inventory-page [role="combobox"] {
-    min-height: 48px !important;
-  }
 }
-
 """
 
 if __name__ == "__main__":
