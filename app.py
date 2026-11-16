@@ -1859,53 +1859,55 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             )
             low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
         with gr.Column(visible=False, elem_classes=["tla-page", "inventory-page"]) as inventory_page:
-            gr.Markdown("#### Add item or set its exact stock")
-            with gr.Row(elem_classes=["inventory-mobile-stack"]):
-                item_name = gr.Dropdown(
-                    label="Item name", choices=[], allow_custom_value=True, filterable=True,
-                    info="Choose an existing item or type a new name.",
+            with gr.Column(elem_classes=["inventory-add-panel"]):
+                gr.Markdown("#### Add item or set its exact stock")
+                with gr.Row(elem_classes=["inventory-mobile-stack"]):
+                    item_name = gr.Dropdown(
+                        label="Item name", choices=[], allow_custom_value=True, filterable=True,
+                        info="Choose an existing item or type a new name.",
+                    )
+                    item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
+                with gr.Row(elem_classes=["inventory-mobile-stack", "inventory-quantity-row"]):
+                    item_quantity = gr.Number(
+                        label="Exact quantity", value=0, precision=0,
+                        info="The total amount currently in stock for this item type.",
+                    )
+                    item_unit = gr.Textbox(
+                        label="Type", value="bottles",
+                        info="Enter how this item is counted, such as packs, bottles, or pieces.",
+                    )
+                    item_threshold = gr.Number(
+                        label="Reorder threshold", value=5, precision=0,
+                        info="Shows a low-stock alert when the quantity reaches or falls below this number.",
+                    )
+                item_name.change(
+                    fn=inventory_item_form_defaults,
+                    inputs=item_name,
+                    outputs=[item_category, item_unit],
                 )
-                item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
-            with gr.Row(elem_classes=["inventory-mobile-stack"]):
-                item_quantity = gr.Number(
-                    label="Exact quantity", value=0, precision=0,
-                    info="The total amount currently in stock for this item type.",
+                item_expiry = gr.Textbox(label="Expiry date (YYYY-MM-DD, optional)", placeholder="2027-06-30")
+                save_button = gr.Button("Save item", variant="primary")
+                save_status = gr.Markdown()
+            with gr.Column(elem_classes=["inventory-adjust-panel"]):
+                gr.Markdown("#### Adjust existing stock (+/-)")
+                gr.Markdown(
+                    "Choose the item and category, then enter a positive number to add stock or a negative number to record stock used. "
+                    "For example, +5 adds five and -2 removes two."
                 )
-                item_unit = gr.Textbox(
-                    label="Type", value="bottles",
-                    info="Enter how this item is counted, such as packs, bottles, or pieces.",
-                )
-                item_threshold = gr.Number(
-                    label="Reorder threshold", value=5, precision=0,
-                    info="Shows a low-stock alert when the quantity reaches or falls below this number.",
-                )
-            item_name.change(
-                fn=inventory_item_form_defaults,
-                inputs=item_name,
-                outputs=[item_category, item_unit],
-            )
-            item_expiry = gr.Textbox(label="Expiry date (YYYY-MM-DD, optional)", placeholder="2027-06-30")
-            save_button = gr.Button("Save item", variant="primary")
-            save_status = gr.Markdown()
-            gr.Markdown("#### Adjust existing stock (+/-)")
-            gr.Markdown(
-                "Choose the item and category, then enter a positive number to add stock or a negative number to record stock used. "
-                "For example, +5 adds five and -2 removes two."
-            )
-            with gr.Row():
-                adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
-                adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
+                with gr.Row(elem_classes=["inventory-mobile-stack", "inventory-adjust-row"]):
+                    adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
+                    adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
+                    adjust_delta = gr.Number(
+                        label="Stock change (+/-)", precision=0,
+                        info="Use + to add received stock and - to subtract used or lost stock.",
+                    )
                 adjust_name.change(
                     fn=suggest_adjust_category,
                     inputs=adjust_name,
                     outputs=adjust_category,
                 )
-                adjust_delta = gr.Number(
-                    label="Stock change (+/-)", precision=0,
-                    info="Use + to add received stock and - to subtract used or lost stock.",
-                )
-            adjust_button = gr.Button("Adjust stock")
-            adjust_status = gr.Markdown()
+                adjust_button = gr.Button("Adjust stock")
+                adjust_status = gr.Markdown()
             with gr.Column(elem_classes=["inventory-table-section"]):
                 gr.Markdown(
                     "#### All inventory\n\nView every item here. On larger screens, edit quantities, expiry dates, and custom values in the table, then save. On smaller screens, use the stock forms above.",
@@ -2267,6 +2269,43 @@ APP_CSS += r"""
 
 /* Mobile-only inventory cards and grouped form panels. */
 @media (max-width: 760px) {
+  .gradio-container .inventory-page .inventory-add-panel,
+  .gradio-container .inventory-page .inventory-adjust-panel {
+    display:flex !important;
+    flex-direction:column !important;
+    gap:10px !important;
+    width:100% !important;
+    min-width:0 !important;
+    padding:12px !important;
+    box-sizing:border-box !important;
+    border:1px solid color-mix(in srgb,var(--tla-gold) 38%,transparent) !important;
+    border-radius:15px !important;
+    background:linear-gradient(145deg,color-mix(in srgb,var(--tla-panel) 98%,white 3%),var(--tla-bg)) !important;
+    box-shadow:0 5px 16px rgba(0,0,0,.16) !important;
+  }
+  .gradio-container .inventory-page .inventory-add-panel > .row,
+  .gradio-container .inventory-page .inventory-adjust-panel > .row {
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:9px !important;
+    width:100% !important;
+    align-items:start !important;
+  }
+  .gradio-container .inventory-page .inventory-quantity-row > *:last-child {
+    grid-column:1 / -1 !important;
+  }
+  .gradio-container .inventory-page .inventory-adjust-row {
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+  }
+  .gradio-container .inventory-page .inventory-adjust-row > *:last-child {
+    grid-column:1 / -1 !important;
+  }
+  .gradio-container .inventory-page .inventory-add-panel > *,
+  .gradio-container .inventory-page .inventory-adjust-panel > * {
+    min-width:0 !important;
+    margin:0 !important;
+  }
+
   .gradio-container .inventory-page {
     display: flex !important;
     flex-direction: column !important;
