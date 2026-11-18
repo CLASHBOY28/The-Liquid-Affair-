@@ -2457,7 +2457,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     label="Select event", choices=[], value=None, interactive=True, scale=2
                 )
                 events_manage_button = gr.Button("Manage selected event", variant="primary", interactive=False)
-                events_complete_button = gr.Button("Complete selected event", variant="primary", interactive=False)
+                events_complete_button = gr.Button("Done / Complete selected event", variant="primary", interactive=False)
                 events_usage_log_button = gr.Button("View usage log", interactive=False)
             with gr.Group(visible=False, elem_classes=["events-usage-log"]) as events_usage_log_group:
                 events_usage_log_title = gr.Markdown()
@@ -2539,7 +2539,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             completion_status = gr.Markdown()
             with gr.Row(elem_classes=["tla-completion-actions"]):
                 completion_cancel_button = gr.Button("Cancel")
-                completion_confirm_button = gr.Button("Complete event and return stock", variant="primary")
+                completion_confirm_button = gr.Button("Done / Complete selected event", variant="primary")
 
     page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page]
     page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock]
