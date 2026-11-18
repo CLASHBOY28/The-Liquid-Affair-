@@ -711,8 +711,9 @@ def refresh_event_views(status_filter="Active"):
     )
 
 
-def event_stock_item_choices():
-    records = inventory_records()
+def event_stock_item_choices(records=None):
+    if records is None:
+        records = inventory_records()
     counts = {}
     for item in records:
         key = normalized_name(item.get("name"))
@@ -733,6 +734,8 @@ def event_stock_validate_allocations(event_id, columns, rows):
     inventory = {normalized_name(x["name"]): x for x in inventory_records()}
     allocated = {}
     for event in event_stock_events():
+        if event.get("status", "active") == "completed":
+            continue
         event_rows = rows if str(event["id"]) == str(event_id) else (event.get("rows") or [])
         event_cols = [str(c).strip().casefold() for c in (event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)]
         if "item" not in event_cols or "quantity" not in event_cols:
@@ -962,6 +965,8 @@ def event_stock_rename(event_id,name):
 def event_stock_delete(event_id, confirmation, request: gr.Request = None):
     try:
         e=event_stock_get(event_id)
+        if e.get("status", "active") == "completed":
+            raise ValueError("Completed events are permanent and cannot be deleted.")
         if (confirmation or "").strip()!=e["name"]: raise ValueError("Type the event name exactly to confirm deletion.")
         supabase.rpc("event_stock_apply", {
             "p_event_id": int(event_id), "p_rows": None,
@@ -1135,6 +1140,8 @@ def event_stock_chat_delete(event_name,confirmation,actor=None):
     es=[e for e in event_stock_events() if normalized_name(e["name"])==normalized_name(event_name)]
     if len(es)!=1: raise ValueError("Event not found or ambiguous.")
     e=es[0]
+    if e.get("status", "active") == "completed":
+        raise ValueError("Completed events are permanent and cannot be deleted.")
     if (confirmation or "").strip()!=e["name"]: raise ValueError("Exact event-name confirmation is required before deletion.")
     result=supabase.rpc("event_stock_apply", {
         "p_event_id": int(e["id"]), "p_rows": None,
@@ -1559,6 +1566,7 @@ def refresh_all():
         mobile_inventory_cards(low_only=True),
         mobile_category_cards(),
         mobile_audit_cards(),
+        gr.update(choices=event_stock_item_choices(items), value=None),
     )
 
 
@@ -2297,16 +2305,17 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     ]
 
     for index, nav_button in enumerate(page_buttons):
-        nav_button.click(
+        nav_event = nav_button.click(
             fn=lambda index=index: select_page(index),
             outputs=page_columns + page_buttons,
             queue=False,
         )
+        if index in (0, 5, 6):
+            nav_event.then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
 
-    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile]
+    refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile, event_item_picker]
     demo.load(refresh_all, outputs=refresh_outputs)
     demo.load(event_stock_initial, outputs=[event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status])
-    demo.load(lambda: gr.update(choices=event_stock_item_choices(), value=None), outputs=[event_item_picker])
     demo.load(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
     event_selector.change(
         event_stock_load, inputs=event_selector,
