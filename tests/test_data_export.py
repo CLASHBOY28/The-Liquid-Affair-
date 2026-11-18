@@ -87,8 +87,12 @@ class DataExportTests(unittest.TestCase):
         self.assertEqual(workbook["Inventory"]["A2"].value, 7)
         self.assertEqual(workbook["Inventory"]["B2"].value, "=1+1")
         self.assertEqual(workbook["Inventory"]["B2"].data_type, "s")
+        inventory_sheet = workbook["Inventory"]
+        custom_values_column = [
+            cell.value for cell in inventory_sheet[1]
+        ].index("custom_values") + 1
         self.assertEqual(
-            json.loads(workbook["Inventory"]["C2"].value),
+            json.loads(inventory_sheet.cell(row=2, column=custom_values_column).value),
             {"supplier": "Local", "lot": 2},
         )
         self.assertEqual(workbook["Events"]["A1"].value, "id")
