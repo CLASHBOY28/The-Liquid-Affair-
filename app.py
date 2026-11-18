@@ -2471,7 +2471,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
             gr.Markdown("### Event Stock")
             gr.Markdown("Each active event has its own saved sheet. Allocations deduct from main Inventory; completing an event records actual use and returns unused stock. Completed event records remain saved.")
-            with gr.Row(elem_classes=["event-stock-create-row"]):
+            with gr.Column(elem_classes=["event-stock-create-row"]):
                 event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
                 event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Name of client", scale=2)
                 event_new_date = gr.DateTime(label="Event date", include_time=False, type="string", scale=2)
