@@ -2080,7 +2080,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             gr.Markdown("Each active event has its own saved sheet. Allocations deduct from main Inventory; completing an event records actual use and returns unused stock. Completed events stay in Previous Events.")
             with gr.Row():
                 event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
-                event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Preston Wedding", scale=2)
+                event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Name of client", scale=2)
                 event_create_button = gr.Button("Add event", variant="primary")
             event_status = gr.Markdown()
             with gr.Row():
