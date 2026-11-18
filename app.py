@@ -2096,14 +2096,6 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             nav_events = gr.Button("Events", variant="secondary", elem_classes=["tla-nav-button"])
             nav_event_stock = gr.Button("Event Stock", variant="secondary", elem_classes=["tla-nav-button"])
         with gr.Column(visible=True, elem_classes=["tla-page"]) as dashboard_page:
-            summary = gr.Markdown()
-            refresh_button = gr.Button("Refresh dashboard")
-            gr.Markdown("#### Low-stock items")
-            low_table = gr.Dataframe(
-                headers=["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date", "Updated"],
-                interactive=False, wrap=False, elem_classes=["desktop-only"]
-            )
-            low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
             gr.Markdown("#### Active events")
             gr.Markdown("Review active events and open one to manage its stock or complete it.")
             dashboard_active_event_table = gr.Dataframe(
@@ -2117,6 +2109,14 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 dashboard_manage_event_button = gr.Button("Manage selected event", variant="primary", interactive=False)
                 dashboard_all_events_button = gr.Button("View all events")
             dashboard_event_status = gr.Markdown()
+            summary = gr.Markdown()
+            refresh_button = gr.Button("Refresh dashboard")
+            gr.Markdown("#### Low-stock items")
+            low_table = gr.Dataframe(
+                headers=["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date", "Updated"],
+                interactive=False, wrap=False, elem_classes=["desktop-only"]
+            )
+            low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
         with gr.Column(visible=False, elem_classes=["tla-page", "inventory-page"]) as inventory_page:
             with gr.Column(elem_classes=["inventory-add-panel"]):
                 gr.Markdown("#### Add item or set its exact stock")
@@ -2645,7 +2645,7 @@ APP_CSS += r"""
   line-height: 1.2 !important;
   text-align: center !important;
   white-space: normal !important;
-  overflow-wrap: anywhere !important;
+  overflow-wrap: normal !important;
   word-break: normal !important;
   box-sizing: border-box !important;
 }
@@ -2653,13 +2653,13 @@ APP_CSS += r"""
 .gradio-container .row.tla-mobile-nav button * {
   max-width: 100% !important;
   white-space: normal !important;
-  overflow-wrap: anywhere !important;
+  overflow-wrap: normal !important;
   text-align: center !important;
 }
 @media (max-width: 760px) {
   .gradio-container .row.tla-mobile-nav > *,
   .tla-mobile-nav > * {
-    flex-basis: calc(25% - 8px) !important;
+    flex-basis: calc(33.333% - 8px) !important;
   }
   .tla-mobile-nav button,
   .gradio-container .row.tla-mobile-nav button,
