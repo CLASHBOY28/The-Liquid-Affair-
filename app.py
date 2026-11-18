@@ -698,6 +698,34 @@ def event_overview_choices(status_filter="Active", events=None):
     return choices
 
 
+def previous_event_rows(events=None):
+    """Flatten completed event records into a permanent, read-only event-wise history."""
+    events = event_stock_events() if events is None else events
+    rows = []
+    for event in events:
+        if event.get("status", "active") != "completed":
+            continue
+        completed_at = str(event.get("completed_at") or "")[:10]
+        for item in (event.get("completion_rows") or []):
+            if isinstance(item, dict):
+                name = item.get("item", "")
+                allocated = int(item.get("allocated") or 0)
+                used = int(item.get("used") or 0)
+                returned = int(item.get("returned") or 0)
+            else:
+                values = list(item or [])
+                if len(values) < 4:
+                    continue
+                name, allocated, used, returned = values[:4]
+                allocated, used, returned = int(allocated or 0), int(used or 0), int(returned or 0)
+            rows.append([event.get("name", ""), completed_at, name, allocated, used, returned, used])
+    return rows
+
+
+def refresh_previous_events():
+    return gr.update(value=previous_event_rows())
+
+
 def event_management_choices(events=None):
     events = event_stock_events() if events is None else events
     return [
@@ -2205,6 +2233,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             nav_history = gr.Button("Stock History", variant="secondary", elem_classes=["tla-nav-button"])
             nav_events = gr.Button("Events", variant="secondary", elem_classes=["tla-nav-button"])
             nav_event_stock = gr.Button("Event Stock", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_previous_events = gr.Button("Previous Events", variant="secondary", elem_classes=["tla-nav-button"])
         with gr.Column(visible=True, elem_classes=["tla-page"]) as dashboard_page:
             gr.Markdown("#### Active events")
             gr.Markdown("Review active events and open one to manage its stock or complete it.")
@@ -2397,6 +2426,15 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             event_completion_table = gr.Dataframe(headers=["Item","Allocated","Used","Returned"],value=[],row_count=(0,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False,visible=False)
             event_complete_button = gr.Button("Done / Complete event", variant="primary", interactive=False)
 
+        with gr.Column(visible=False, elem_classes=["tla-page", "previous-events-page"]) as previous_events_page:
+            gr.Markdown("### Previous Events")
+            gr.Markdown("A permanent, read-only record of completed events, including allocated, used, returned, and consumed quantities.")
+            previous_events_table = gr.Dataframe(
+                headers=["Event", "Completed", "Item", "Allocated", "Used", "Returned", "Consumed"],
+                value=[], interactive=False, wrap=False,
+            )
+            previous_events_refresh = gr.Button("Refresh previous events", variant="secondary")
+
     completion_event_id = gr.State(value=None)
     with gr.Group(visible=False, elem_classes=["tla-completion-modal"]) as completion_modal:
         with gr.Group(elem_classes=["tla-completion-dialog"]):
@@ -2414,8 +2452,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 completion_cancel_button = gr.Button("Cancel")
                 completion_confirm_button = gr.Button("Complete event and return stock", variant="primary")
 
-    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page]
-    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock]
+    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page, previous_events_page]
+    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock, nav_previous_events]
 
     def select_page(selected):
         visibility = [gr.update(visible=(index == selected)) for index in range(len(page_columns))]
@@ -2449,6 +2487,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         )
         if index in (0, 5, 6):
             nav_event.then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+        if index == 7:
+            nav_event.then(refresh_previous_events, outputs=previous_events_table)
 
     refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile, event_item_picker]
     demo.load(
@@ -2531,6 +2571,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         inputs=[completion_event_id, completion_table],
         outputs=[completion_status, completion_modal],
     ).then(
+        refresh_previous_events, outputs=previous_events_table
+    ).then(
         refresh_all, outputs=refresh_outputs
     ).then(
         refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
@@ -2547,6 +2589,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     dashboard_all_events_button.click(
         fn=lambda: select_page(5), outputs=page_columns + page_buttons, queue=False
     ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    previous_events_refresh.click(refresh_previous_events, outputs=previous_events_table)
     event_add_inventory_button.click(
         event_stock_add_inventory_item, inputs=[event_selector,event_item_picker,event_item_quantity,event_table],
         outputs=[event_status,event_table,event_completion_table]
