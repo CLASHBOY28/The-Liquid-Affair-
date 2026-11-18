@@ -2686,8 +2686,6 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     event_create_button.click(
         event_stock_create, inputs=[event_new_name, event_new_date],
         outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table]
-    ).then(
-        lambda: gr.update(value=None), outputs=event_new_date
     ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs).then(
         event_stock_action_button_states,
         inputs=[event_selector,event_item_picker,event_item_quantity],
