@@ -61,7 +61,7 @@ For named audit rows in an existing Supabase database, run `migration_add_audit_
 
 ## Event Stock database setup
 
-Before using Event Stock, run `event_stock_migration.sql` once in Supabase Dashboard → SQL Editor. Event sheets are separate from main Inventory and do not automatically deduct main stock. Deleting an event requires typing its exact name and permanently deletes that event sheet.
+Apply the latest `event_stock_migration.sql` in Supabase Dashboard → SQL Editor. Event allocations deduct from main Inventory immediately. When an event is complete, record each item's actual used and returned quantities; returned stock is credited to main Inventory, and the completed event remains in Previous Events. Deleting an unwanted event requires typing its exact name; active allocations are returned to main Inventory before the event sheet is permanently deleted.
 
 ## Run locally
 
