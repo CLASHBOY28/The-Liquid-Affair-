@@ -1083,8 +1083,9 @@ def prepare_event_completion(event_id):
     allocations = aggregate_event_allocations(columns, event.get("rows") or [])
     instructions = (
         "Every allocated item is listed. Item names and allocated quantities are read-only. "
-        "Enter only the quantity returning to Main Inventory; enter 0 if none is returned. "
-        "Used quantity is calculated automatically."
+        "Tap the empty cell under Quantity to return and type a whole number (0 or more). "
+        "Negative values are not allowed. Item names and allocated quantities are read-only; "
+        "used quantity is calculated automatically."
     )
     if not allocations:
         instructions = "No stock was allocated to this event. You can complete it without returning stock."
@@ -1092,8 +1093,9 @@ def prepare_event_completion(event_id):
         str(event["id"]),
         event.get("name", ""),
         gr.update(
-            value=[[item, allocated, None] for item, allocated in allocations],
+            value=[[item, allocated, 0] for item, allocated in allocations],
             headers=["Item", "Allocated", "Quantity to return"],
+            datatype=["str", "number", "number"],
             interactive=True,
             row_count=len(allocations),
             row_limits=(len(allocations), len(allocations)),
@@ -3068,6 +3070,15 @@ APP_CSS += r"""
 .tla-completion-modal .tla-completion-table .dataframe-container {
   min-width:0 !important;
   overflow-x:auto !important;
+}
+.tla-completion-modal .tla-completion-table [role="gridcell"] {
+  cursor:text !important;
+  touch-action:manipulation !important;
+}
+.tla-completion-modal .tla-completion-table [role="gridcell"] input {
+  cursor:text !important;
+  pointer-events:auto !important;
+  min-height:42px !important;
 }
 .tla-completion-modal .tla-completion-actions {
   display:flex !important;
