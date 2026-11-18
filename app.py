@@ -3324,6 +3324,69 @@ APP_CSS += r"""
   .tla-completion-modal .tla-completion-actions { flex-direction:column-reverse !important; }
   .tla-completion-modal .tla-completion-actions button { width:100% !important; }
 }
+/* Final mobile overrides: simple full-width forms and compact event reports. */
+@media (max-width:760px) {
+  .gradio-container .inventory-page .inventory-add-panel > .row,
+  .gradio-container .inventory-page .inventory-adjust-panel > .row,
+  .gradio-container .inventory-page .inventory-mobile-stack,
+  .gradio-container .event-stock-page > .row,
+  .gradio-container .event-stock-page .row {
+    display:flex !important;
+    flex-direction:column !important;
+    flex-wrap:nowrap !important;
+    align-items:stretch !important;
+    gap:12px !important;
+    width:100% !important;
+    min-width:0 !important;
+  }
+  .gradio-container .inventory-page .inventory-add-panel > .row > *,
+  .gradio-container .inventory-page .inventory-adjust-panel > .row > *,
+  .gradio-container .inventory-page .inventory-mobile-stack > *,
+  .gradio-container .event-stock-page .row > * {
+    flex:0 0 auto !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    grid-column:auto !important;
+    box-sizing:border-box !important;
+  }
+  .gradio-container .inventory-page button,
+  .gradio-container .event-stock-page button {
+    display:flex !important;
+    width:100% !important;
+    max-width:100% !important;
+    min-height:48px !important;
+    height:auto !important;
+    justify-content:center !important;
+    padding:11px 14px !important;
+    font-size:14px !important;
+    line-height:1.25 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+  }
+  .gradio-container .inventory-page button span,
+  .gradio-container .event-stock-page button span {
+    font-size:14px !important;
+    line-height:1.25 !important;
+    white-space:normal !important;
+  }
+  .gradio-container .inventory-page input,
+  .gradio-container .inventory-page [role="combobox"],
+  .gradio-container .event-stock-page input,
+  .gradio-container .event-stock-page [role="combobox"] {
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    box-sizing:border-box !important;
+  }
+  .gradio-container .events-usage-log-table th,
+  .gradio-container .events-usage-log-table td {
+    padding:6px 4px !important;
+    font-size:11px !important;
+    line-height:1.2 !important;
+  }
+}
+
 """
 
 if __name__ == "__main__":
