@@ -2463,7 +2463,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 events_usage_log_title = gr.Markdown()
                 events_usage_log_table = gr.Dataframe(
                     headers=["Item", "Allocated", "Used", "Returned"],
-                    value=[], interactive=False, wrap=True,
+                    value=[], interactive=False, wrap=False,
                     elem_classes=["events-usage-log-table"],
                 )
             events_status = gr.Markdown()
@@ -2659,7 +2659,13 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         event_stock_delete_button_state,
         inputs=[event_delete_selector,event_delete_confirm], outputs=event_delete_button,
     )
-    events_filter.change(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    events_filter.change(
+        refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
+    ).then(
+        events_management_button_states,
+        inputs=[events_event_picker, events_filter],
+        outputs=[events_manage_button, events_complete_button],
+    )
     dashboard_event_picker.change(
         manage_event_button_state, inputs=dashboard_event_picker, outputs=dashboard_manage_event_button
     )
@@ -3448,6 +3454,135 @@ APP_CSS += r"""
   .gradio-container .events-usage-log-table th,
   .gradio-container .events-usage-log-table td {
     font-size:10px !important; padding:6px 7px !important;
+  }
+}
+
+
+/* OnePlus Nord CE 5G and other narrow-screen layout overrides. */
+@media (max-width: 760px) {
+  .gradio-container .tla-mobile-nav,
+  .gradio-container .row.tla-mobile-nav {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-flow: row !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 8px !important;
+    overflow: visible !important;
+    box-sizing: border-box !important;
+  }
+  .gradio-container .tla-mobile-nav > *,
+  .gradio-container .row.tla-mobile-nav > * {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .gradio-container .tla-mobile-nav .tla-nav-button,
+  .gradio-container .tla-mobile-nav button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 54px !important;
+    height: auto !important;
+    padding: 10px 8px !important;
+    font-size: 13px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+
+  .gradio-container .event-stock-page,
+  .gradio-container .event-stock-page > *,
+  .gradio-container .event-stock-page .row {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .gradio-container .event-stock-page .row,
+  .gradio-container .event-stock-page .event-stock-create-row {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .gradio-container .event-stock-page .row > *,
+  .gradio-container .event-stock-page .event-stock-create-row > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+  }
+  .gradio-container .event-stock-page button {
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 46px !important;
+    height: auto !important;
+    padding: 10px 12px !important;
+    font-size: 14px !important;
+    line-height: 1.25 !important;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+  .gradio-container .event-stock-page input,
+  .gradio-container .event-stock-page [role="combobox"],
+  .gradio-container .event-stock-page textarea {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .gradio-container .event-stock-page .dataframe-container {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .gradio-container .events-usage-log {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .gradio-container .events-usage-log-table,
+  .gradio-container .events-usage-log-table .table-wrap,
+  .gradio-container .events-usage-log-table .table-container,
+  .gradio-container .events-usage-log-table .dataframe-container {
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .gradio-container .events-usage-log-table table {
+    width: max-content !important;
+    min-width: 440px !important;
+    table-layout: auto !important;
+  }
+  .gradio-container .events-usage-log-table th,
+  .gradio-container .events-usage-log-table td {
+    min-width: 76px !important;
+    padding: 7px 8px !important;
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+    hyphens: none !important;
+  }
+  .gradio-container .events-usage-log-table th:first-child,
+  .gradio-container .events-usage-log-table td:first-child {
+    min-width: 130px !important;
+  }
+  .gradio-container .events-usage-log h3 {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
   }
 }
 
