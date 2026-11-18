@@ -10,7 +10,7 @@ create table if not exists inventory_items (
   name text not null,
   category_id bigint references categories(id) on delete set null,
   quantity integer not null default 0 check (quantity >= 0),
-  reorder_threshold integer not null default 5 check (reorder_threshold >= 0),
+  reorder_threshold integer not null default 3 check (reorder_threshold >= 0),
   unit text not null default 'pcs',
   expiry_date date,
   custom_values jsonb not null default '{}'::jsonb,
