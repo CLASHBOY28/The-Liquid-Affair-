@@ -14,6 +14,7 @@ from app_auth import load_auth_users
 from audit_identity import pack_actor_note, unpack_actor_note
 from inventory_matching import normalized_name, unique_item_names, unique_labels
 from event_completion import aggregate_event_allocations, build_completion_rows
+from data_export import EXPORT_TABLES, create_excel_export_file, fetch_all_table_rows
 
 load_dotenv()
 
@@ -1670,6 +1671,22 @@ def refresh_all():
     )
 
 
+def export_all_data():
+    """Build a fresh Excel snapshot from every application table."""
+    try:
+        tables = {
+            sheet_name: fetch_all_table_rows(supabase, table_name)
+            for sheet_name, table_name, _columns in EXPORT_TABLES
+        }
+        return create_excel_export_file(tables)
+    except Exception as exc:
+        logging.exception("Excel export failed")
+        raise gr.Error(
+            "Could not export the latest app data. Please try again or contact an administrator.",
+            title="Excel export failed",
+        ) from exc
+
+
 def add_item_ui(name, category, quantity, threshold, unit, expiry_date, request: gr.Request = None):
     try:
         message = save_item(name, category, quantity, threshold, unit, expiry_date,
@@ -2203,7 +2220,9 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 dashboard_all_events_button = gr.Button("View all events")
             dashboard_event_status = gr.Markdown()
             summary = gr.Markdown()
-            refresh_button = gr.Button("Refresh dashboard")
+            with gr.Row(elem_classes=["dashboard-actions"]):
+                refresh_button = gr.Button("Refresh dashboard")
+                export_button = gr.DownloadButton("Export all data to Excel", variant="secondary")
             gr.Markdown("#### Low-stock items")
             low_table = gr.Dataframe(
                 headers=["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date", "Updated"],
@@ -2577,6 +2596,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     refresh_button.click(refresh_all, outputs=refresh_outputs).then(
         refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
     )
+    export_button.click(export_all_data, inputs=[], outputs=export_button)
     save_button.click(
         add_item_ui,
         inputs=[item_name, item_category, item_quantity, item_threshold, item_unit, item_expiry],
