@@ -656,7 +656,9 @@ EVENT_STOCK_DEFAULT_COLUMNS = ["Item", "Quantity", "Unit", "Notes"]
 
 def event_stock_label(event):
     suffix = "Previous Event" if event.get("status") == "completed" else "Active"
-    return f'{event["name"]} · {suffix}'
+    event_date = event.get("event_date")
+    date_label = f' · {event_date}' if event_date else ""
+    return f'{event["name"]} · {suffix}{date_label}'
 
 
 def event_overview_rows(status_filter="Active", events=None):
@@ -678,6 +680,7 @@ def event_overview_rows(status_filter="Active", events=None):
         result.append([
             event.get("name", ""),
             "Closed" if is_closed else "Active",
+            str(event.get("event_date") or ""),
             item_rows,
             str(event.get("created_at") or "")[:10],
         ])
@@ -720,6 +723,10 @@ def refresh_event_views(status_filter="Active", events=None):
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(visible=False),
+        "",
+        gr.update(value=[], headers=["Item", "Allocated", "Used", "Returned"]),
     )
 
 
@@ -830,11 +837,11 @@ def event_stock_add_inventory_item(event_id, item_id, quantity, data, request: g
 
 
 def event_stock_events():
-    return supabase.table("event_stock_events").select("id,name,columns,rows,created_at,status,completed_at,completion_rows").order("created_at",desc=True).execute().data or []
+    return supabase.table("event_stock_events").select("id,name,event_date,columns,rows,created_at,status,completed_at,completion_rows").order("created_at",desc=True).execute().data or []
 
 def event_stock_get(event_id):
     if not event_id: raise ValueError("Choose or create an event first.")
-    rows=supabase.table("event_stock_events").select("id,name,columns,rows,status,completed_at,completion_rows").eq("id",int(event_id)).limit(1).execute().data or []
+    rows=supabase.table("event_stock_events").select("id,name,event_date,columns,rows,status,completed_at,completion_rows").eq("id",int(event_id)).limit(1).execute().data or []
     if not rows: raise ValueError("Event not found.")
     return rows[0]
 
@@ -978,16 +985,29 @@ def event_completion_button_state(event_id):
         return gr.update(interactive=False)
 
 
-def event_stock_create(name):
+def event_stock_create(name, event_date):
     try:
-        name=(name or "").strip()
-        if not name: raise ValueError("Enter an event name.")
-        if any(e["name"].casefold()==name.casefold() for e in event_stock_events()): raise ValueError("An event with that name already exists.")
-        e=supabase.table("event_stock_events").insert({"name":name,"columns":EVENT_STOCK_DEFAULT_COLUMNS,"rows":[["","","",""]]}).execute().data[0]
-        choices=[(event_stock_label(x),str(x["id"])) for x in event_stock_events()]
-        table,rename,confirm,completion,status=event_stock_update(e)
-        return "Created "+name,gr.update(choices=choices,value=str(e["id"])),table,rename,confirm,completion
-    except Exception as exc: return "Could not create event: "+str(exc),gr.update(),gr.update(),"",gr.update(),gr.update()
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Enter an event name.")
+        raw_date = str(event_date or "").strip()
+        if not raw_date:
+            raise ValueError("Event date is required. Select the date before creating the event.")
+        try:
+            event_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date().isoformat()
+        except ValueError:
+            raise ValueError("Enter a valid event date.")
+        if any(e["name"].casefold() == name.casefold() for e in event_stock_events()):
+            raise ValueError("An event with that name already exists.")
+        e = supabase.table("event_stock_events").insert({
+            "name": name, "event_date": event_date,
+            "columns": EVENT_STOCK_DEFAULT_COLUMNS, "rows": [["", "", "", ""]],
+        }).execute().data[0]
+        choices = [(event_stock_label(x), str(x["id"])) for x in event_stock_events()]
+        table, rename, confirm, completion, status = event_stock_update(e)
+        return "Created " + name + " · " + event_date, gr.update(choices=choices, value=str(e["id"])), table, rename, confirm, completion
+    except Exception as exc:
+        return "Could not create event: " + str(exc), gr.update(), gr.update(), "", gr.update(), gr.update()
 
 def event_stock_rename(event_id,name):
     try:
@@ -1208,16 +1228,16 @@ def dashboard_summary(records=None, categories=None):
 
 
 def event_stock_chat_list():
-    return json.dumps([{"id":e["id"],"name":e["name"],"items":len(e.get("rows") or [])} for e in event_stock_events()],default=str)
+    return json.dumps([{"id":e["id"],"name":e["name"],"event_date":e.get("event_date"),"items":len(e.get("rows") or [])} for e in event_stock_events()],default=str)
 
 def event_stock_chat_view(event_name):
     found=[e for e in event_stock_events() if normalized_name(e.get("name"))==normalized_name(event_name)]
     if len(found)!=1: raise ValueError("Event not found or ambiguous. List Event Stock sessions.")
     e=found[0]
-    return json.dumps({"event":e["name"],"columns":e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS,"rows":e.get("rows") or []},default=str)
+    return json.dumps({"event":e["name"],"event_date":e.get("event_date"),"status":e.get("status"),"completion_rows":e.get("completion_rows") or [],"columns":e.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS,"rows":e.get("rows") or []},default=str)
 
-def event_stock_chat_create(event_name,actor=None):
-    r=event_stock_create(event_name)
+def event_stock_chat_create(event_name,event_date,actor=None):
+    r=event_stock_create(event_name,event_date)
     if not r or not str(r[0]).startswith("Created "): raise ValueError(r[0] if r else "Create failed.")
     write_audit("Event: "+event_name,"event_create",note="Created Event Stock session",actor=actor)
     return r[0]
@@ -1301,7 +1321,7 @@ TOOLS = [
 
     {"type":"function","function":{"name":"list_event_stock_sessions","description":"List saved Event Stock sessions.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"view_event_stock","description":"View a saved Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"}},"required":["event_name"],"additionalProperties":False}}},
-    {"type":"function","function":{"name":"create_event_stock_session","description":"Create an Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"}},"required":["event_name"],"additionalProperties":False}}},
+    {"type":"function","function":{"name":"create_event_stock_session","description":"Create an Event Stock session. An event date is mandatory; ask the user for it if not provided.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"event_date":{"type":"string","description":"Event date in YYYY-MM-DD format"}},"required":["event_name","event_date"],"additionalProperties":False}}},
     {"type":"function","function":{"name":"rename_event_stock_session","description":"Rename an Event Stock session.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"new_name":{"type":"string"}},"required":["event_name","new_name"],"additionalProperties":False}}},
     {"type":"function","function":{"name":"allocate_event_stock","description":"Add quantity of a main Inventory item to an event; saves immediately and checks allocations across all events.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"item_name":{"type":"string"},"quantity":{"type":"integer","minimum":1}},"required":["event_name","item_name","quantity"],"additionalProperties":False}}},
     {"type":"function","function":{"name":"set_event_stock_quantity","description":"Set exact quantity of an item in an event; saves immediately and checks allocations across all events.","parameters":{"type":"object","properties":{"event_name":{"type":"string"},"item_name":{"type":"string"},"quantity":{"type":"integer","minimum":0}},"required":["event_name","item_name","quantity"],"additionalProperties":False}}},
@@ -1333,7 +1353,7 @@ def execute_tool(name: str, args: dict[str, Any], actor=None) -> str:
             return json.dumps(categories_list(), default=str)
         if name == "list_event_stock_sessions": return event_stock_chat_list()
         if name == "view_event_stock": return event_stock_chat_view(args["event_name"])
-        if name == "create_event_stock_session": return event_stock_chat_create(args["event_name"], actor)
+        if name == "create_event_stock_session": return event_stock_chat_create(args["event_name"], args["event_date"], actor)
         if name == "rename_event_stock_session": return event_stock_chat_rename(args["event_name"], args["new_name"], actor)
         if name == "allocate_event_stock": return event_stock_chat_write(args["event_name"], args["item_name"], args["quantity"], "add", actor)
         if name == "set_event_stock_quantity": return event_stock_chat_write(args["event_name"], args["item_name"], args["quantity"], "set", actor)
@@ -2371,15 +2391,22 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 choices=["Active", "Closed", "All"], value="Active", label="Show events"
             )
             events_table = gr.Dataframe(
-                headers=["Event", "Status", "Items", "Created"], value=[],
+                headers=["Event", "Status", "Event date", "Items", "Created"], value=[],
                 interactive=False, wrap=False
             )
             with gr.Row():
                 events_event_picker = gr.Dropdown(
-                    label="Select event to manage", choices=[], value=None, interactive=True, scale=2
+                    label="Select event", choices=[], value=None, interactive=True, scale=2
                 )
                 events_manage_button = gr.Button("Manage selected event", variant="primary", interactive=False)
                 events_complete_button = gr.Button("Complete selected event", variant="primary", interactive=False)
+                events_usage_log_button = gr.Button("View usage log", interactive=False)
+            with gr.Group(visible=False) as events_usage_log_group:
+                events_usage_log_title = gr.Markdown()
+                events_usage_log_table = gr.Dataframe(
+                    headers=["Item", "Allocated", "Used", "Returned"],
+                    value=[], interactive=False, wrap=True,
+                )
             events_status = gr.Markdown()
 
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
@@ -2388,6 +2415,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             with gr.Row():
                 event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
                 event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Name of client", scale=2)
+                event_new_date = gr.DateTime(label="Event date", include_time=False, type="string", scale=2)
                 event_create_button = gr.Button("Add event", variant="primary")
             event_status = gr.Markdown()
             with gr.Row():
@@ -2457,6 +2485,45 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page]
     page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock]
 
+    def event_usage_log_button_state(event_id):
+        completed = False
+        if event_id:
+            try:
+                completed = event_stock_get(event_id).get("status", "active") == "completed"
+            except Exception:
+                completed = False
+        return (
+            gr.update(interactive=completed),
+            gr.update(visible=False),
+            "",
+            gr.update(value=[], headers=["Item", "Allocated", "Used", "Returned"]),
+        )
+
+
+    def load_event_usage_log(event_id):
+        if not event_id:
+            raise gr.Error("Select a closed event first.", title="Select a closed event")
+        event = event_stock_get(event_id)
+        if event.get("status", "active") != "completed":
+            raise gr.Error("Usage logs are available for closed events only.", title="Event is still active")
+        completion_rows = event.get("completion_rows") or []
+        rows = []
+        for record in completion_rows:
+            if isinstance(record, dict):
+                rows.append([
+                    record.get("item", ""),
+                    record.get("allocated", 0),
+                    record.get("used", ""),
+                    record.get("returned", ""),
+                ])
+            elif isinstance(record, (list, tuple)) and len(record) >= 4:
+                rows.append(list(record[:4]))
+        title = f'### {event.get("name", "Event")} · Usage log\nEvent date: {event.get("event_date") or "Not recorded"}'
+        if not rows:
+            title += "\n\nNo item-level usage quantities were recorded for this event."
+        return title, gr.update(value=rows, headers=["Item", "Allocated", "Used", "Returned"]), gr.update(visible=True)
+
+
     def select_page(selected):
         visibility = [gr.update(visible=(index == selected)) for index in range(len(page_columns))]
         styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(len(page_buttons))]
@@ -2479,6 +2546,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         events_table, events_event_picker,
         event_rename_selector, event_delete_selector,
         dashboard_manage_event_button, events_manage_button, events_complete_button,
+        events_usage_log_button, events_usage_log_group, events_usage_log_title, events_usage_log_table,
     ]
 
     for index, nav_button in enumerate(page_buttons):
@@ -2540,6 +2608,13 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         manage_event_button_state, inputs=events_event_picker, outputs=events_manage_button
     ).then(
         event_completion_button_state, inputs=events_event_picker, outputs=events_complete_button
+    ).then(
+        event_usage_log_button_state, inputs=events_event_picker,
+        outputs=[events_usage_log_button, events_usage_log_group, events_usage_log_title, events_usage_log_table],
+    )
+    events_usage_log_button.click(
+        load_event_usage_log, inputs=events_event_picker,
+        outputs=[events_usage_log_title, events_usage_log_table, events_usage_log_group],
     )
     for manage_button, manage_picker in [
         (dashboard_manage_event_button, dashboard_event_picker),
@@ -2609,8 +2684,10 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         outputs=[event_add_inventory_button,event_save_button,event_complete_button],
     )
     event_create_button.click(
-        event_stock_create, inputs=event_new_name,
+        event_stock_create, inputs=[event_new_name, event_new_date],
         outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table]
+    ).then(
+        lambda: gr.update(value=None), outputs=event_new_date
     ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs).then(
         event_stock_action_button_states,
         inputs=[event_selector,event_item_picker,event_item_quantity],
