@@ -95,7 +95,10 @@ begin
   select * into ev from event_stock_events where id = p_event_id for update;
   if not found then raise exception 'Event not found.'; end if;
 
-  if ev.status = 'completed' and not p_delete then
+  if ev.status = 'completed' then
+    if p_delete then
+      raise exception 'Completed events are permanent and cannot be deleted.';
+    end if;
     raise exception 'This event is complete and retained in Previous Events. Create a new event to make changes.';
   end if;
 
