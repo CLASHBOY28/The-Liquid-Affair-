@@ -1939,7 +1939,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     with gr.Row():
         theme_selector = gr.Dropdown(
             choices=["Neon Lounge", "Tropical Luxe", "Classic Gold"],
-            value="Neon Lounge", label="Choose your theme", scale=1
+            value=None, label="Choose your theme", scale=1
         )
     theme_selector.change(fn=theme_css, inputs=theme_selector, outputs=theme_styles)
     gr.Markdown("### Your bar, your stock — all in one place")
@@ -2033,7 +2033,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             with gr.Accordion("Customize inventory columns", open=False):
                 gr.Markdown("Add extra fields to your inventory, then move or remove them here.")
                 custom_field_name = gr.Textbox(label="New column name", placeholder="Supplier")
-                custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value="text")
+                custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value=None)
                 add_field_button = gr.Button("Add column", variant="primary")
                 field_status = gr.Markdown()
                 manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()], value=None)
@@ -2050,7 +2050,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                         "Gemini",
                         "Cloudflare Workers AI",
                     ],
-                    value="Auto (recommended)",
+                    value=None,
                     label="⚙️ AI Engine",
                     info="Choose which AI provider powers this chat.",
                     scale=2,
