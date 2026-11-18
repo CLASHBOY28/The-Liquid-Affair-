@@ -2386,7 +2386,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             completion_instructions = gr.Markdown()
             completion_table = gr.Dataframe(
                 headers=["Item", "Allocated", "Quantity to return"], value=[],
-                row_count=0, row_limits=(0, None), column_count=3, column_limits=(3, 3),
+                row_count=0, row_limits=(0, None), column_count=3,
                 datatype=["str", "number", "number"], interactive=True, static_columns=[0, 1],
                 wrap=True, elem_classes=["tla-completion-table"],
             )
