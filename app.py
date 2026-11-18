@@ -13,6 +13,7 @@ from chatbot_capabilities import calculate_math, current_india_time_context
 from app_auth import load_auth_users
 from audit_identity import pack_actor_note, unpack_actor_note
 from inventory_matching import normalized_name, unique_item_names, unique_labels
+from event_completion import aggregate_event_allocations, build_completion_rows
 
 load_dotenv()
 
@@ -717,6 +718,7 @@ def refresh_event_views(status_filter="Active", events=None):
         gr.update(choices=management_choices, value=None),
         gr.update(interactive=False),
         gr.update(interactive=False),
+        gr.update(interactive=False),
     )
 
 
@@ -965,6 +967,16 @@ def manage_event_button_state(event_id):
     return gr.update(interactive=bool(event_id))
 
 
+def event_completion_button_state(event_id):
+    if not event_id:
+        return gr.update(interactive=False)
+    try:
+        event = event_stock_get(event_id)
+        return gr.update(interactive=event.get("status", "active") != "completed")
+    except Exception:
+        return gr.update(interactive=False)
+
+
 def event_stock_create(name):
     try:
         name=(name or "").strip()
@@ -1059,6 +1071,66 @@ def event_stock_complete(event_id, data, request: gr.Request = None):
         if "insufficient quantity" in str(exc).lower() or "not enough stock" in str(exc).lower():
             raise gr.Error(str(exc), title="Insufficient quantity")
         return "Could not complete event: "+str(exc),gr.update(),gr.update()
+
+def prepare_event_completion(event_id):
+    if not event_id:
+        raise gr.Error("Select an active event first.", title="Select an event")
+    event = event_stock_get(event_id)
+    if event.get("status", "active") == "completed":
+        raise gr.Error("This event is already completed and is kept in Previous Events.", title="Event already completed")
+    columns = event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS
+    allocations = aggregate_event_allocations(columns, event.get("rows") or [])
+    instructions = (
+        "Every allocated item is listed. Item names and allocated quantities are read-only. "
+        "Enter only the quantity returning to Main Inventory; enter 0 if none is returned. "
+        "Used quantity is calculated automatically."
+    )
+    if not allocations:
+        instructions = "No stock was allocated to this event. You can complete it without returning stock."
+    return (
+        str(event["id"]),
+        event.get("name", ""),
+        gr.update(
+            value=[[item, allocated, None] for item, allocated in allocations],
+            headers=["Item", "Allocated", "Quantity to return"],
+            interactive=True,
+            row_count=len(allocations),
+            row_limits=(len(allocations), len(allocations)),
+            static_columns=[0, 1],
+        ),
+        instructions,
+        gr.update(visible=True),
+    )
+
+
+def complete_event_from_return_quantities(event_id, return_values, request: gr.Request = None):
+    try:
+        if not event_id:
+            raise ValueError("Select an active event first.")
+        event = event_stock_get(event_id)
+        if event.get("status", "active") == "completed":
+            raise ValueError("This event is already completed and is kept in Previous Events.")
+        allocations = aggregate_event_allocations(
+            event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS,
+            event.get("rows") or [],
+        )
+        if hasattr(return_values, "values"):
+            return_values = return_values.values.tolist()
+        completion_data = build_completion_rows(allocations, return_values or [])
+        message, _, _ = event_stock_complete(event_id, completion_data, request=request)
+        if str(message).startswith("Could not complete event:"):
+            return str(message), gr.update(visible=True)
+        return str(message), gr.update(visible=False)
+    except Exception as exc:
+        return "Could not complete event: " + str(exc), gr.update(visible=True)
+
+
+def refresh_event_stock_selector(event_id):
+    events = event_stock_events()
+    choices = [(event_stock_label(event), str(event["id"])) for event in events]
+    selected = str(event_id) if any(str(event["id"]) == str(event_id) for event in events) else None
+    return gr.update(choices=choices, value=selected)
+
 
 def event_stock_add_column(event_id,name):
     try:
@@ -2267,6 +2339,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     label="Select event to manage", choices=[], value=None, interactive=True, scale=2
                 )
                 events_manage_button = gr.Button("Manage selected event", variant="primary", interactive=False)
+                events_complete_button = gr.Button("Complete selected event", variant="primary", interactive=False)
             events_status = gr.Markdown()
 
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
@@ -2301,10 +2374,26 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             gr.Markdown("Edit cells directly if needed, then save. Quantity changes adjust main Inventory by the difference.")
             event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"dynamic"),interactive=True,wrap=False)
             event_save_button = gr.Button("Save event stock", variant="primary", interactive=False)
-            gr.Markdown("#### Complete event")
-            gr.Markdown("Enter actual Used and Returned quantities. They must add up to Allocated; returned stock goes back to main Inventory.")
-            event_completion_table = gr.Dataframe(headers=["Item","Allocated","Used","Returned"],value=[],row_count=(0,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False)
+            gr.Markdown("Choose Done / Complete event to review every allocated item and enter only the quantity being returned.")
+            event_completion_table = gr.Dataframe(headers=["Item","Allocated","Used","Returned"],value=[],row_count=(0,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False,visible=False)
             event_complete_button = gr.Button("Done / Complete event", variant="primary", interactive=False)
+
+    completion_event_id = gr.State(value=None)
+    with gr.Group(visible=False, elem_classes=["tla-completion-modal"]) as completion_modal:
+        with gr.Group(elem_classes=["tla-completion-dialog"]):
+            gr.Markdown("### Complete event")
+            completion_event_name = gr.Textbox(label="Event", value="", interactive=False)
+            completion_instructions = gr.Markdown()
+            completion_table = gr.Dataframe(
+                headers=["Item", "Allocated", "Quantity to return"], value=[],
+                row_count=0, row_limits=(0, None), column_count=3, column_limits=(3, 3),
+                datatype=["str", "number", "number"], interactive=True, static_columns=[0, 1],
+                wrap=True, elem_classes=["tla-completion-table"],
+            )
+            completion_status = gr.Markdown()
+            with gr.Row(elem_classes=["tla-completion-actions"]):
+                completion_cancel_button = gr.Button("Cancel")
+                completion_confirm_button = gr.Button("Complete event and return stock", variant="primary")
 
     page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page]
     page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock]
@@ -2330,7 +2419,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         dashboard_active_event_table, dashboard_event_picker,
         events_table, events_event_picker,
         event_rename_selector, event_delete_selector,
-        dashboard_manage_event_button, events_manage_button,
+        dashboard_manage_event_button, events_manage_button, events_complete_button,
     ]
 
     for index, nav_button in enumerate(page_buttons):
@@ -2390,6 +2479,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     )
     events_event_picker.change(
         manage_event_button_state, inputs=events_event_picker, outputs=events_manage_button
+    ).then(
+        event_completion_button_state, inputs=events_event_picker, outputs=events_complete_button
     )
     for manage_button, manage_picker in [
         (dashboard_manage_event_button, dashboard_event_picker),
@@ -2399,6 +2490,41 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             open_event_in_stock, inputs=[manage_picker,event_item_picker,event_item_quantity],
             outputs=[event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status] + page_columns + page_buttons + [event_add_inventory_button,event_save_button,event_complete_button],
         )
+    for complete_button, event_picker in [
+        (event_complete_button, event_selector),
+        (events_complete_button, events_event_picker),
+    ]:
+        complete_button.click(
+            prepare_event_completion,
+            inputs=event_picker,
+            outputs=[
+                completion_event_id, completion_event_name, completion_table,
+                completion_instructions, completion_modal,
+            ],
+        )
+    completion_cancel_button.click(
+        lambda: (gr.update(visible=False), ""),
+        outputs=[completion_modal, completion_status],
+        queue=False,
+    )
+    completion_confirm_button.click(
+        complete_event_from_return_quantities,
+        inputs=[completion_event_id, completion_table],
+        outputs=[completion_status, completion_modal],
+    ).then(
+        refresh_all, outputs=refresh_outputs
+    ).then(
+        refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
+    ).then(
+        refresh_event_stock_selector, inputs=[completion_event_id], outputs=event_selector
+    ).then(
+        event_stock_load, inputs=event_selector,
+        outputs=[event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status],
+    ).then(
+        event_stock_action_button_states,
+        inputs=[event_selector,event_item_picker,event_item_quantity],
+        outputs=[event_add_inventory_button,event_save_button,event_complete_button],
+    )
     dashboard_all_events_button.click(
         fn=lambda: select_page(5), outputs=page_columns + page_buttons, queue=False
     ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
@@ -2440,16 +2566,6 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     )
     event_save_button.click(
         event_stock_save, inputs=[event_selector,event_table],
-        outputs=[event_status,event_table,event_completion_table]
-    ).then(refresh_all, outputs=refresh_outputs).then(
-        refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
-    ).then(
-        event_stock_action_button_states,
-        inputs=[event_selector,event_item_picker,event_item_quantity],
-        outputs=[event_add_inventory_button,event_save_button,event_complete_button],
-    )
-    event_complete_button.click(
-        event_stock_complete, inputs=[event_selector,event_completion_table],
         outputs=[event_status,event_table,event_completion_table]
     ).then(refresh_all, outputs=refresh_outputs).then(
         refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
@@ -2895,6 +3011,63 @@ APP_CSS += r"""
     font-size:9px !important;
     line-height:1.2 !important;
     opacity:.82 !important;
+  }
+}
+
+
+/* Event completion overlay: the item and allocation columns stay locked. */
+.tla-completion-modal {
+  position:fixed !important;
+  inset:0 !important;
+  z-index:9999 !important;
+  width:100vw !important;
+  height:100dvh !important;
+  max-height:100dvh !important;
+  overflow-y:auto !important;
+  box-sizing:border-box !important;
+  padding:clamp(8px,3vh,24px) !important;
+  background:rgba(7,6,13,.84) !important;
+}
+.tla-completion-modal .tla-completion-dialog {
+  width:min(820px,100%) !important;
+  max-height:calc(100dvh - 32px) !important;
+  overflow-y:auto !important;
+  margin:0 auto !important;
+  padding:20px !important;
+  border:1px solid color-mix(in srgb,var(--tla-gold) 45%,transparent) !important;
+  border-radius:18px !important;
+  background:var(--tla-panel,#171323) !important;
+  box-shadow:0 18px 56px rgba(0,0,0,.5) !important;
+}
+.tla-completion-modal .tla-completion-table {
+  width:100% !important;
+  min-width:0 !important;
+}
+.tla-completion-modal .tla-completion-table .dataframe-container {
+  min-width:0 !important;
+  overflow-x:auto !important;
+}
+.tla-completion-modal .tla-completion-actions {
+  display:flex !important;
+  flex-direction:row !important;
+  justify-content:flex-end !important;
+  gap:10px !important;
+}
+@media(max-width:760px) {
+  .tla-completion-modal {
+    padding:8px !important;
+  }
+  .tla-completion-modal .tla-completion-dialog {
+    width:100% !important;
+    max-height:calc(100dvh - 16px) !important;
+    padding:12px !important;
+    border-radius:14px !important;
+  }
+  .tla-completion-modal .tla-completion-actions {
+    flex-direction:column-reverse !important;
+  }
+  .tla-completion-modal .tla-completion-actions button {
+    width:100% !important;
   }
 }
 """
