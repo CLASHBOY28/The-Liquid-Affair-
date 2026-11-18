@@ -2501,9 +2501,9 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             gr.Markdown("Edit cells directly if needed, then save. Quantity changes adjust main Inventory by the difference.")
             event_table = gr.Dataframe(headers=EVENT_STOCK_DEFAULT_COLUMNS,value=[["","","",""]],row_count=(1,"dynamic"),col_count=(4,"dynamic"),interactive=True,wrap=False)
             event_save_button = gr.Button("Save event stock", variant="primary", interactive=False)
-            gr.Markdown("Choose Done / Complete event to review every allocated item and enter only the quantity being returned.")
             event_completion_table = gr.Dataframe(headers=["Item","Allocated","Used","Returned"],value=[],row_count=(0,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False,visible=False)
-            event_complete_button = gr.Button("Done / Complete event", variant="primary", interactive=False)
+            # Keep the completion handler wired for compatibility, but remove its button from Event Stock.
+            event_complete_button = gr.Button("Done / Complete event", variant="primary", interactive=False, visible=False)
 
     completion_event_id = gr.State(value=None)
     completion_row_groups = []
