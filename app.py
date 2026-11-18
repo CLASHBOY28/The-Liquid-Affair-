@@ -655,6 +655,62 @@ def event_stock_label(event):
     return f'{event["name"]} · {suffix}'
 
 
+def event_overview_rows(status_filter="Active"):
+    wanted = (status_filter or "Active").strip().casefold()
+    result = []
+    for event in event_stock_events():
+        is_closed = event.get("status", "active") == "completed"
+        if wanted == "active" and is_closed:
+            continue
+        if wanted == "closed" and not is_closed:
+            continue
+        columns = [str(col).strip().casefold() for col in (event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS)]
+        item_index = columns.index("item") if "item" in columns else 0
+        item_rows = sum(
+            1 for row in (event.get("rows") or [])
+            if item_index < len(row) and str(row[item_index] or "").strip()
+        )
+        result.append([
+            event.get("name", ""),
+            "Closed" if is_closed else "Active",
+            item_rows,
+            str(event.get("created_at") or "")[:10],
+        ])
+    return result
+
+
+def event_overview_choices(status_filter="Active"):
+    wanted = (status_filter or "Active").strip().casefold()
+    choices = []
+    for event in event_stock_events():
+        is_closed = event.get("status", "active") == "completed"
+        if wanted == "active" and is_closed:
+            continue
+        if wanted == "closed" and not is_closed:
+            continue
+        choices.append((event_stock_label(event), str(event["id"])))
+    return choices
+
+
+def event_management_choices():
+    return [
+        (event_stock_label(event), str(event["id"]))
+        for event in event_stock_events()
+        if event.get("status", "active") != "completed"
+    ]
+
+
+def refresh_event_views(status_filter="Active"):
+    return (
+        gr.update(value=event_overview_rows("Active")),
+        gr.update(choices=event_overview_choices("Active"), value=None),
+        gr.update(value=event_overview_rows(status_filter)),
+        gr.update(choices=event_overview_choices(status_filter), value=None),
+        gr.update(choices=event_management_choices(), value=None),
+        gr.update(choices=event_management_choices(), value=None),
+    )
+
+
 def event_stock_item_choices():
     records = inventory_records()
     counts = {}
@@ -790,7 +846,7 @@ def event_stock_update(e):
     complete = e.get("status", "active") == "completed"
     label = "**Previous Event** · Completed" if complete else "**Active Event**"
     return (gr.update(value=e.get("rows") or [], headers=cols, interactive=not complete),
-            e["name"], e["name"],
+            e["name"], "",
             gr.update(value=complete_rows, headers=["Item", "Allocated", "Used", "Returned"], interactive=not complete),
             label)
 
@@ -1951,6 +2007,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             nav_categories = gr.Button("Categories", variant="secondary", elem_classes=["tla-nav-button"])
             nav_ai = gr.Button("AI Assistant", variant="secondary", elem_classes=["tla-nav-button"])
             nav_history = gr.Button("Stock History", variant="secondary", elem_classes=["tla-nav-button"])
+            nav_events = gr.Button("Events", variant="secondary", elem_classes=["tla-nav-button"])
             nav_event_stock = gr.Button("Event Stock", variant="secondary", elem_classes=["tla-nav-button"])
         with gr.Column(visible=True, elem_classes=["tla-page"]) as dashboard_page:
             summary = gr.Markdown()
@@ -1961,6 +2018,19 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 interactive=False, wrap=False, elem_classes=["desktop-only"]
             )
             low_stock_mobile = gr.HTML(value=mobile_inventory_cards(low_only=True), elem_classes=["mobile-only"])
+            gr.Markdown("#### Active events")
+            gr.Markdown("Review active events and open one to manage its stock or complete it.")
+            dashboard_active_event_table = gr.Dataframe(
+                headers=["Event", "Status", "Items", "Created"], value=[],
+                interactive=False, wrap=False
+            )
+            with gr.Row():
+                dashboard_event_picker = gr.Dropdown(
+                    label="Select active event", choices=[], value=None, interactive=True, scale=2
+                )
+                dashboard_manage_event_button = gr.Button("Manage selected event", variant="primary")
+                dashboard_all_events_button = gr.Button("View all events")
+            dashboard_event_status = gr.Markdown()
         with gr.Column(visible=False, elem_classes=["tla-page", "inventory-page"]) as inventory_page:
             with gr.Column(elem_classes=["inventory-add-panel"]):
                 gr.Markdown("#### Add item or set its exact stock")
@@ -2075,6 +2145,23 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             )
             audit_mobile = gr.HTML(value=mobile_audit_cards(), elem_classes=["mobile-only"])
 
+        with gr.Column(visible=False, elem_classes=["tla-page"]) as events_page:
+            gr.Markdown("### Events")
+            gr.Markdown("Browse active and completed events. Manage an active event to update its stock or complete it.")
+            events_filter = gr.Radio(
+                choices=["Active", "Closed", "All"], value="Active", label="Show events"
+            )
+            events_table = gr.Dataframe(
+                headers=["Event", "Status", "Items", "Created"], value=[],
+                interactive=False, wrap=False
+            )
+            with gr.Row():
+                events_event_picker = gr.Dropdown(
+                    label="Select event to manage", choices=[], value=None, interactive=True, scale=2
+                )
+                events_manage_button = gr.Button("Manage selected event", variant="primary")
+            events_status = gr.Markdown()
+
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
             gr.Markdown("### Event Stock")
             gr.Markdown("Each active event has its own saved sheet. Allocations deduct from main Inventory; completing an event records actual use and returns unused stock. Completed events stay in Previous Events.")
@@ -2084,10 +2171,18 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 event_create_button = gr.Button("Add event", variant="primary")
             event_status = gr.Markdown()
             with gr.Row():
-                event_rename_name = gr.Textbox(label="Rename selected event")
+                event_rename_selector = gr.Dropdown(
+                    label="Select event to rename", choices=[], value=None, interactive=True, scale=1
+                )
+                event_rename_name = gr.Textbox(label="New event name", value="", scale=1)
                 event_rename_button = gr.Button("Rename event")
             with gr.Row():
-                event_delete_confirm = gr.Textbox(label="Type event name to confirm deletion", placeholder="Exact event name")
+                event_delete_selector = gr.Dropdown(
+                    label="Select event to delete", choices=[], value=None, interactive=True, scale=1
+                )
+                event_delete_confirm = gr.Textbox(
+                    label="Type event name to confirm deletion", placeholder="Exact event name", value="", scale=1
+                )
                 event_delete_button = gr.Button("Delete event", variant="stop")
             gr.Markdown("#### Add stock from main Inventory")
             gr.Markdown("Select an existing inventory item and quantity. Insufficient stock is rejected before any stock changes.")
@@ -2104,13 +2199,29 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             event_completion_table = gr.Dataframe(headers=["Item","Allocated","Used","Returned"],value=[],row_count=(0,"dynamic"),col_count=(4,"fixed"),interactive=True,wrap=False)
             event_complete_button = gr.Button("Done / Complete event", variant="primary")
 
-    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, event_stock_page]
-    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_event_stock]
+    page_columns = [dashboard_page, inventory_page, categories_page, ai_page, history_page, events_page, event_stock_page]
+    page_buttons = [nav_dashboard, nav_inventory, nav_categories, nav_ai, nav_history, nav_events, nav_event_stock]
 
     def select_page(selected):
-        visibility = [gr.update(visible=(index == selected)) for index in range(6)]
-        styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(6)]
+        visibility = [gr.update(visible=(index == selected)) for index in range(len(page_columns))]
+        styles = [gr.update(variant=("primary" if index == selected else "secondary")) for index in range(len(page_buttons))]
         return visibility + styles
+
+    def open_event_in_stock(event_id):
+        if not event_id:
+            raise gr.Error("Choose an event to manage.", title="Select an event")
+        event_state = event_stock_load(event_id)
+        return (
+            gr.update(value=str(event_id)),
+            *event_state,
+            *select_page(6),
+        )
+
+    event_view_outputs = [
+        dashboard_active_event_table, dashboard_event_picker,
+        events_table, events_event_picker,
+        event_rename_selector, event_delete_selector,
+    ]
 
     for index, nav_button in enumerate(page_buttons):
         nav_button.click(
@@ -2123,14 +2234,47 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     demo.load(refresh_all, outputs=refresh_outputs)
     demo.load(event_stock_initial, outputs=[event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status])
     demo.load(lambda: gr.update(choices=event_stock_item_choices(), value=None), outputs=[event_item_picker])
+    demo.load(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
     event_selector.change(event_stock_load, inputs=event_selector, outputs=[event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status])
-    event_add_inventory_button.click(event_stock_add_inventory_item, inputs=[event_selector,event_item_picker,event_item_quantity,event_table], outputs=[event_status,event_table,event_completion_table]).then(refresh_all, outputs=refresh_outputs)
-    event_create_button.click(event_stock_create, inputs=event_new_name, outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table])
-    event_rename_button.click(event_stock_rename, inputs=[event_selector,event_rename_name], outputs=[event_status,event_selector,event_rename_name,event_delete_confirm])
-    event_delete_button.click(event_stock_delete, inputs=[event_selector,event_delete_confirm], outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table]).then(refresh_all, outputs=refresh_outputs)
-    event_save_button.click(event_stock_save, inputs=[event_selector,event_table], outputs=[event_status,event_table,event_completion_table]).then(refresh_all, outputs=refresh_outputs)
-    event_complete_button.click(event_stock_complete, inputs=[event_selector,event_completion_table], outputs=[event_status,event_table,event_completion_table]).then(refresh_all, outputs=refresh_outputs)
-    refresh_button.click(refresh_all, outputs=refresh_outputs)
+    events_filter.change(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    for manage_button, manage_picker in [
+        (dashboard_manage_event_button, dashboard_event_picker),
+        (events_manage_button, events_event_picker),
+    ]:
+        manage_button.click(
+            open_event_in_stock, inputs=[manage_picker],
+            outputs=[event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status] + page_columns + page_buttons,
+        )
+    dashboard_all_events_button.click(
+        fn=lambda: select_page(5), outputs=page_columns + page_buttons, queue=False
+    )
+    event_add_inventory_button.click(
+        event_stock_add_inventory_item, inputs=[event_selector,event_item_picker,event_item_quantity,event_table],
+        outputs=[event_status,event_table,event_completion_table]
+    ).then(refresh_all, outputs=refresh_outputs).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    event_create_button.click(
+        event_stock_create, inputs=event_new_name,
+        outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table]
+    ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    event_rename_button.click(
+        event_stock_rename, inputs=[event_rename_selector,event_rename_name],
+        outputs=[event_status,event_selector,event_rename_name,event_delete_confirm]
+    ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    event_delete_button.click(
+        event_stock_delete, inputs=[event_delete_selector,event_delete_confirm],
+        outputs=[event_status,event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table]
+    ).then(refresh_all, outputs=refresh_outputs).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    event_save_button.click(
+        event_stock_save, inputs=[event_selector,event_table],
+        outputs=[event_status,event_table,event_completion_table]
+    ).then(refresh_all, outputs=refresh_outputs).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    event_complete_button.click(
+        event_stock_complete, inputs=[event_selector,event_completion_table],
+        outputs=[event_status,event_table,event_completion_table]
+    ).then(refresh_all, outputs=refresh_outputs).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    refresh_button.click(refresh_all, outputs=refresh_outputs).then(
+        refresh_event_views, inputs=[events_filter], outputs=event_view_outputs
+    )
     save_button.click(
         add_item_ui,
         inputs=[item_name, item_category, item_quantity, item_threshold, item_unit, item_expiry],
