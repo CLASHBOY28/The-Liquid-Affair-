@@ -1073,6 +1073,9 @@ def event_stock_complete(event_id, data, request: gr.Request = None):
             raise gr.Error(str(exc), title="Insufficient quantity")
         return "Could not complete event: "+str(exc),gr.update(),gr.update()
 
+COMPLETION_MAX_ROWS = 100
+
+
 def prepare_event_completion(event_id):
     if not event_id:
         raise gr.Error("Select an active event first.", title="Select an event")
@@ -1081,32 +1084,44 @@ def prepare_event_completion(event_id):
         raise gr.Error("This event is already completed and is kept in Previous Events.", title="Event already completed")
     columns = event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS
     allocations = aggregate_event_allocations(columns, event.get("rows") or [])
+    if len(allocations) > COMPLETION_MAX_ROWS:
+        raise gr.Error(
+            f"This event has {len(allocations)} allocated items; the completion form supports up to {COMPLETION_MAX_ROWS}.",
+            title="Too many allocated items",
+        )
     instructions = (
-        "Every allocated item is listed. Item names and allocated quantities are read-only. "
-        "Tap the empty cell under Quantity to return and type a whole number (0 or more). "
-        "Negative values are not allowed. Item names and allocated quantities are read-only; "
-        "used quantity is calculated automatically."
+        "Enter only numbers in **Quantity to return**. Use whole numbers from 0 up to the allocated quantity. "
+        "Item names and allocated quantities cannot be edited. Used quantity is calculated automatically."
     )
     if not allocations:
         instructions = "No stock was allocated to this event. You can complete it without returning stock."
+    row_updates = []
+    for index in range(COMPLETION_MAX_ROWS):
+        if index < len(allocations):
+            item, allocated = allocations[index]
+            row_updates.extend([
+                gr.update(visible=True),
+                gr.update(value=item),
+                gr.update(value=allocated),
+                gr.update(value=0, minimum=0, maximum=allocated),
+            ])
+        else:
+            row_updates.extend([
+                gr.update(visible=False),
+                gr.update(value=""),
+                gr.update(value=""),
+                gr.update(value=0, minimum=0, maximum=0),
+            ])
     return (
         str(event["id"]),
         event.get("name", ""),
-        gr.update(
-            value=[[item, allocated, 0] for item, allocated in allocations],
-            headers=["Item", "Allocated", "Quantity to return"],
-            datatype=["str", "number", "number"],
-            interactive=True,
-            row_count=len(allocations),
-            row_limits=(len(allocations), len(allocations)),
-            static_columns=[0, 1],
-        ),
+        *row_updates,
         instructions,
         gr.update(visible=True),
     )
 
 
-def complete_event_from_return_quantities(event_id, return_values, request: gr.Request = None):
+def complete_event_from_return_quantities(event_id, *return_values, request: gr.Request = None):
     try:
         if not event_id:
             raise ValueError("Select an active event first.")
@@ -1117,9 +1132,13 @@ def complete_event_from_return_quantities(event_id, return_values, request: gr.R
             event.get("columns") or EVENT_STOCK_DEFAULT_COLUMNS,
             event.get("rows") or [],
         )
-        if hasattr(return_values, "values"):
-            return_values = return_values.values.tolist()
-        completion_data = build_completion_rows(allocations, return_values or [])
+        if len(allocations) > COMPLETION_MAX_ROWS:
+            raise ValueError("This event has too many allocated items to complete in this form.")
+        completion_values = [
+            [item, allocated, returned]
+            for (item, allocated), returned in zip(allocations, return_values[:len(allocations)])
+        ]
+        completion_data = build_completion_rows(allocations, completion_values)
         message, _, _ = event_stock_complete(event_id, completion_data, request=request)
         if str(message).startswith("Could not complete event:"):
             return str(message), gr.update(visible=True)
@@ -2400,17 +2419,36 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             event_complete_button = gr.Button("Done / Complete event", variant="primary", interactive=False)
 
     completion_event_id = gr.State(value=None)
+    completion_row_groups = []
+    completion_item_inputs = []
+    completion_allocated_inputs = []
+    completion_return_inputs = []
     with gr.Group(visible=False, elem_classes=["tla-completion-modal"]) as completion_modal:
         with gr.Group(elem_classes=["tla-completion-dialog"]):
             gr.Markdown("### Complete event")
             completion_event_name = gr.Textbox(label="Event", value="", interactive=False)
             completion_instructions = gr.Markdown()
-            completion_table = gr.Dataframe(
-                headers=["Item", "Allocated", "Quantity to return"], value=[],
-                row_count=0, row_limits=(0, None), column_count=3,
-                datatype=["str", "number", "number"], interactive=True, static_columns=[0, 1],
-                wrap=True, elem_classes=["tla-completion-table"],
-            )
+            with gr.Row(elem_classes=["tla-completion-header"]):
+                gr.Markdown("**Item**", elem_classes=["tla-completion-heading-item"])
+                gr.Markdown("**Allocated**", elem_classes=["tla-completion-heading-allocated"])
+                gr.Markdown("**Quantity to return**", elem_classes=["tla-completion-heading-return"])
+            with gr.Column(elem_classes=["tla-completion-rows"]):
+                for index in range(COMPLETION_MAX_ROWS):
+                    with gr.Row(visible=False, elem_classes=["tla-completion-row"]) as completion_row:
+                        completion_item = gr.Textbox(
+                            label=None, value="", interactive=False, show_label=False, scale=3,
+                        )
+                        completion_allocated = gr.Textbox(
+                            label=None, value="", interactive=False, show_label=False, scale=1,
+                        )
+                        completion_return = gr.Number(
+                            label=None, value=0, precision=0, minimum=0, maximum=0,
+                            interactive=True, show_label=False, scale=2,
+                        )
+                    completion_row_groups.append(completion_row)
+                    completion_item_inputs.append(completion_item)
+                    completion_allocated_inputs.append(completion_allocated)
+                    completion_return_inputs.append(completion_return)
             completion_status = gr.Markdown()
             with gr.Row(elem_classes=["tla-completion-actions"]):
                 completion_cancel_button = gr.Button("Cancel")
@@ -2519,7 +2557,17 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             prepare_event_completion,
             inputs=event_picker,
             outputs=[
-                completion_event_id, completion_event_name, completion_table,
+                completion_event_id, completion_event_name,
+                *[
+                    component
+                    for row_components in zip(
+                        completion_row_groups,
+                        completion_item_inputs,
+                        completion_allocated_inputs,
+                        completion_return_inputs,
+                    )
+                    for component in row_components
+                ],
                 completion_instructions, completion_modal,
             ],
         )
@@ -2530,7 +2578,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
     )
     completion_confirm_button.click(
         complete_event_from_return_quantities,
-        inputs=[completion_event_id, completion_table],
+        inputs=[completion_event_id, *completion_return_inputs],
         outputs=[completion_status, completion_modal],
     ).then(
         refresh_all, outputs=refresh_outputs
@@ -3039,7 +3087,7 @@ APP_CSS += r"""
 }
 
 
-/* Event completion overlay: the item and allocation columns stay locked. */
+/* Event completion form: fixed read-only item/allocation fields and direct numeric inputs. */
 .tla-completion-modal {
   position:fixed !important;
   inset:0 !important;
@@ -3063,22 +3111,40 @@ APP_CSS += r"""
   background:var(--tla-panel,#171323) !important;
   box-shadow:0 18px 56px rgba(0,0,0,.5) !important;
 }
-.tla-completion-modal .tla-completion-table {
+.tla-completion-modal .tla-completion-header,
+.tla-completion-modal .tla-completion-row {
+  display:grid !important;
+  grid-template-columns:minmax(0,3fr) minmax(76px,1fr) minmax(116px,2fr) !important;
+  align-items:center !important;
+  gap:9px !important;
   width:100% !important;
+}
+.tla-completion-modal .tla-completion-header {
+  padding:0 2px 6px !important;
+  border-bottom:1px solid color-mix(in srgb,var(--tla-gold) 28%,transparent) !important;
+}
+.tla-completion-modal .tla-completion-header > * {
   min-width:0 !important;
+  margin:0 !important;
+  font-size:12px !important;
 }
-.tla-completion-modal .tla-completion-table .dataframe-container {
+.tla-completion-modal .tla-completion-row {
+  padding:7px 0 !important;
+  border-bottom:1px solid color-mix(in srgb,var(--tla-gold) 13%,transparent) !important;
+}
+.tla-completion-modal .tla-completion-row > * {
   min-width:0 !important;
-  overflow-x:auto !important;
+  margin:0 !important;
 }
-.tla-completion-modal .tla-completion-table [role="gridcell"] {
-  cursor:text !important;
-  touch-action:manipulation !important;
+.tla-completion-modal .tla-completion-row input {
+  min-height:46px !important;
+  height:46px !important;
+  box-sizing:border-box !important;
+  font-size:15px !important;
 }
-.tla-completion-modal .tla-completion-table [role="gridcell"] input {
-  cursor:text !important;
-  pointer-events:auto !important;
-  min-height:42px !important;
+.tla-completion-modal .tla-completion-row input[readonly],
+.tla-completion-modal .tla-completion-row input:disabled {
+  opacity:.82 !important;
 }
 .tla-completion-modal .tla-completion-actions {
   display:flex !important;
@@ -3087,21 +3153,27 @@ APP_CSS += r"""
   gap:10px !important;
 }
 @media(max-width:760px) {
-  .tla-completion-modal {
-    padding:8px !important;
-  }
+  .tla-completion-modal { padding:8px !important; }
   .tla-completion-modal .tla-completion-dialog {
     width:100% !important;
     max-height:calc(100dvh - 16px) !important;
     padding:12px !important;
     border-radius:14px !important;
   }
-  .tla-completion-modal .tla-completion-actions {
-    flex-direction:column-reverse !important;
+  .tla-completion-modal .tla-completion-header,
+  .tla-completion-modal .tla-completion-row {
+    grid-template-columns:minmax(0,1.7fr) minmax(54px,.7fr) minmax(104px,1.2fr) !important;
+    gap:6px !important;
   }
-  .tla-completion-modal .tla-completion-actions button {
-    width:100% !important;
+  .tla-completion-modal .tla-completion-header > * { font-size:10px !important; }
+  .tla-completion-modal .tla-completion-row input {
+    min-height:48px !important;
+    height:48px !important;
+    padding:6px !important;
+    font-size:14px !important;
   }
+  .tla-completion-modal .tla-completion-actions { flex-direction:column-reverse !important; }
+  .tla-completion-modal .tla-completion-actions button { width:100% !important; }
 }
 """
 
