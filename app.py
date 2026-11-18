@@ -3668,6 +3668,127 @@ APP_CSS += r"""
   }
 }
 
+/* Event Stock: polished typography and reliable mobile form sizing. */
+.gradio-container .event-stock-page {
+  color: #f5f1fb !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+.gradio-container .event-stock-page h1,
+.gradio-container .event-stock-page h2,
+.gradio-container .event-stock-page h3 {
+  color: #f2c66d !important;
+  font-weight: 750 !important;
+  letter-spacing: -.02em !important;
+  line-height: 1.2 !important;
+}
+.gradio-container .event-stock-page p {
+  color: #ddd6eb !important;
+  font-size: 15px !important;
+  line-height: 1.65 !important;
+  letter-spacing: .005em !important;
+}
+.gradio-container .event-stock-page label,
+.gradio-container .event-stock-page label span {
+  color: #f3eafa !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  overflow-wrap: normal !important;
+}
+.gradio-container .event-stock-page input,
+.gradio-container .event-stock-page textarea,
+.gradio-container .event-stock-page [role="combobox"] {
+  min-height: 48px !important;
+  height: auto !important;
+  padding: 11px 13px !important;
+  border: 1px solid rgba(202, 166, 255, .34) !important;
+  border-radius: 13px !important;
+  background: #191426 !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0 !important;
+  box-sizing: border-box !important;
+}
+.gradio-container .event-stock-page input::placeholder,
+.gradio-container .event-stock-page textarea::placeholder {
+  color: #aaa1b9 !important;
+  opacity: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.gradio-container .event-stock-page .event-stock-create-row {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 15px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.gradio-container .event-stock-page .event-stock-create-row > *,
+.gradio-container .event-stock-page .event-stock-create-row .form,
+.gradio-container .event-stock-page .event-stock-create-row .wrap {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 0 0 auto !important;
+  box-sizing: border-box !important;
+}
+.gradio-container .event-stock-page .event-stock-create-row button {
+  min-height: 52px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: linear-gradient(110deg, #c832f0, #8d20c9) !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 750 !important;
+  letter-spacing: .01em !important;
+}
+@media (max-width: 760px) {
+  .gradio-container .event-stock-page {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    overflow-x: hidden !important;
+  }
+  .gradio-container .event-stock-page h3 {
+    font-size: 21px !important;
+  }
+  .gradio-container .event-stock-page p {
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 13px !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row > *,
+  .gradio-container .event-stock-page .event-stock-create-row > * > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    flex: 0 0 auto !important;
+  }
+  .gradio-container .event-stock-page input,
+  .gradio-container .event-stock-page textarea,
+  .gradio-container .event-stock-page [role="combobox"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 50px !important;
+    font-size: 16px !important;
+    padding: 12px !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row button {
+    width: 100% !important;
+    min-height: 52px !important;
+    font-size: 16px !important;
+  }
+}
+
+
 """
 
 if __name__ == "__main__":
