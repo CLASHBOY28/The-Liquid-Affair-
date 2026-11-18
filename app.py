@@ -240,17 +240,18 @@ def find_item_by_name_and_category(name, category_id):
         )
     return matches[0] if matches else None
 
-def inventory_headers():
+def inventory_headers(fields=None):
+    fields = custom_fields_list() if fields is None else fields
     return ["ID", "Item", "Category", "Quantity", "Type", "Reorder at", "Expiry date"] + [
-        field["name"] for field in custom_fields_list()
+        field["name"] for field in fields
     ] + ["Updated"]
 
 
-def inventory_rows(low_only: bool = False):
-    records = inventory_records()
+def inventory_rows(low_only: bool = False, records=None, fields=None):
+    records = inventory_records() if records is None else records
     if low_only:
         records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
-    fields = custom_fields_list()
+    fields = custom_fields_list() if fields is None else fields
     rows = []
     for item in records:
         category = item.get("categories") or {}
@@ -293,10 +294,11 @@ def audit_records(limit=200):
     return records
 
 
-def audit_rows():
+def audit_rows(records=None):
+    records = audit_records() if records is None else records
     return [[r.get("created_at", ""), r.get("actor", "Legacy"), r.get("item_name", ""),
              r.get("action", ""), r.get("old_quantity"), r.get("new_quantity"), r.get("note", "")]
-            for r in audit_records()]
+            for r in records]
 
 
 def write_audit(item_name, action, old_qty=None, new_qty=None, note=None, actor=None):
@@ -655,10 +657,11 @@ def event_stock_label(event):
     return f'{event["name"]} · {suffix}'
 
 
-def event_overview_rows(status_filter="Active"):
+def event_overview_rows(status_filter="Active", events=None):
     wanted = (status_filter or "Active").strip().casefold()
+    events = event_stock_events() if events is None else events
     result = []
-    for event in event_stock_events():
+    for event in events:
         is_closed = event.get("status", "active") == "completed"
         if wanted == "active" and is_closed:
             continue
@@ -679,10 +682,11 @@ def event_overview_rows(status_filter="Active"):
     return result
 
 
-def event_overview_choices(status_filter="Active"):
+def event_overview_choices(status_filter="Active", events=None):
     wanted = (status_filter or "Active").strip().casefold()
+    events = event_stock_events() if events is None else events
     choices = []
-    for event in event_stock_events():
+    for event in events:
         is_closed = event.get("status", "active") == "completed"
         if wanted == "active" and is_closed:
             continue
@@ -692,22 +696,25 @@ def event_overview_choices(status_filter="Active"):
     return choices
 
 
-def event_management_choices():
+def event_management_choices(events=None):
+    events = event_stock_events() if events is None else events
     return [
         (event_stock_label(event), str(event["id"]))
-        for event in event_stock_events()
+        for event in events
         if event.get("status", "active") != "completed"
     ]
 
 
-def refresh_event_views(status_filter="Active"):
+def refresh_event_views(status_filter="Active", events=None):
+    events = event_stock_events() if events is None else events
+    management_choices = event_management_choices(events)
     return (
-        gr.update(value=event_overview_rows("Active")),
-        gr.update(choices=event_overview_choices("Active"), value=None),
-        gr.update(value=event_overview_rows(status_filter)),
-        gr.update(choices=event_overview_choices(status_filter), value=None),
-        gr.update(choices=event_management_choices(), value=None),
-        gr.update(choices=event_management_choices(), value=None),
+        gr.update(value=event_overview_rows("Active", events)),
+        gr.update(choices=event_overview_choices("Active", events), value=None),
+        gr.update(value=event_overview_rows(status_filter, events)),
+        gr.update(choices=event_overview_choices(status_filter, events), value=None),
+        gr.update(choices=management_choices, value=None),
+        gr.update(choices=management_choices, value=None),
         gr.update(interactive=False),
         gr.update(interactive=False),
     )
@@ -855,9 +862,19 @@ def event_stock_update(e):
             gr.update(value=complete_rows, headers=["Item", "Allocated", "Used", "Returned"], interactive=not complete),
             label)
 
-def event_stock_initial():
+def load_initial_data(status_filter="Active"):
+    inventory_state = refresh_all()
+    events = event_stock_events()
+    return (
+        *inventory_state,
+        *event_stock_initial(events),
+        *refresh_event_views(status_filter, events),
+    )
+
+
+def event_stock_initial(events=None):
     try:
-        events=event_stock_events()
+        events = event_stock_events() if events is None else events
         choices=[(event_stock_label(e),str(e["id"])) for e in events]
         if not events:
             return gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),"","",gr.update(value=[],headers=["Item","Allocated","Used","Returned"]),"Create your first event."
@@ -1078,12 +1095,13 @@ def event_stock_remove_column(event_id,name):
     except Exception as exc: return "Could not remove column: "+str(exc),gr.update(),gr.update()
 
 
-def dashboard_summary():
-    records = inventory_records()
+def dashboard_summary(records=None, categories=None):
+    records = inventory_records() if records is None else records
+    categories = categories_list() if categories is None else categories
     low = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
     units = len(records)
     total = sum(r["quantity"] for r in records)
-    category_count = len(categories_list())
+    category_count = len(categories)
     return (
         '<div class="tla-kpi-grid">'
         '<div class="tla-kpi"><span>Inventory items</span><strong>' + str(units) + '</strong></div>'
@@ -1558,21 +1576,24 @@ def chat_fn(message, history, provider="Auto (recommended)", request: gr.Request
 def refresh_all():
     items = inventory_records()
     cats = categories_list()
+    fields = custom_fields_list()
+    history = audit_records()
+    headers = inventory_headers(fields)
     return (
-        dashboard_summary(),
-        gr.update(value=inventory_rows(), headers=inventory_headers()),
-        gr.update(value=inventory_rows(low_only=True), headers=inventory_headers()),
+        dashboard_summary(items, cats),
+        gr.update(value=inventory_rows(records=items, fields=fields), headers=headers),
+        gr.update(value=inventory_rows(low_only=True, records=items, fields=fields), headers=headers),
         [[c["id"], c["name"]] for c in cats],
-        audit_rows(),
+        audit_rows(history),
         gr.update(choices=unique_item_names(items), value=None),
         gr.update(choices=[c["name"] for c in cats], value=None),
         gr.update(choices=unique_item_names(items), value=None),
         gr.update(choices=[c["name"] for c in cats], value=None),
-        gr.update(choices=[f["name"] for f in custom_fields_list()], value=None),
-        mobile_inventory_cards(),
-        mobile_inventory_cards(low_only=True),
-        mobile_category_cards(),
-        mobile_audit_cards(),
+        gr.update(choices=[f["name"] for f in fields], value=None),
+        mobile_inventory_cards(records=items),
+        mobile_inventory_cards(low_only=True, records=items),
+        mobile_category_cards(cats),
+        mobile_audit_cards(history),
         gr.update(choices=event_stock_item_choices(items), value=None),
     )
 
@@ -1665,9 +1686,9 @@ def _html_escape(value):
     return escape("" if value is None else str(value))
 
 
-def mobile_inventory_cards(low_only=False):
+def mobile_inventory_cards(low_only=False, records=None):
     """Compact, touch-friendly inventory cards for narrow Android screens."""
-    records = inventory_records()
+    records = inventory_records() if records is None else records
     if low_only:
         records = [r for r in records if r["quantity"] <= r["reorder_threshold"]]
     if not records:
@@ -1696,8 +1717,8 @@ def mobile_inventory_cards(low_only=False):
     return '<div class="tla-mobile-card-list">' + "".join(cards) + '</div>'
 
 
-def mobile_category_cards():
-    categories = categories_list()
+def mobile_category_cards(categories=None):
+    categories = categories_list() if categories is None else categories
     if not categories:
         return '<div class="mobile-empty">No categories created yet.</div>'
     return '<div class="tla-mobile-card-list">' + "".join(
@@ -1707,8 +1728,8 @@ def mobile_category_cards():
     ) + '</div>'
 
 
-def mobile_audit_cards():
-    records = audit_records(limit=100)
+def mobile_audit_cards(records=None):
+    records = audit_records(limit=100) if records is None else records[:100]
     if not records:
         return '<div class="mobile-empty">No stock changes recorded yet.</div>'
     cards = []
@@ -2322,9 +2343,11 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
             nav_event.then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
 
     refresh_outputs = [summary, inventory_table, low_table, category_table, audit_table, item_name, item_category, adjust_name, adjust_category, manage_field, inventory_mobile, low_stock_mobile, category_mobile, audit_mobile, event_item_picker]
-    demo.load(refresh_all, outputs=refresh_outputs)
-    demo.load(event_stock_initial, outputs=[event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status])
-    demo.load(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    demo.load(
+        load_initial_data,
+        inputs=[events_filter],
+        outputs=refresh_outputs + [event_selector,event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status] + event_view_outputs,
+    )
     event_selector.change(
         event_stock_load, inputs=event_selector,
         outputs=[event_table,event_rename_name,event_delete_confirm,event_completion_table,event_status]
