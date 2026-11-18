@@ -2237,32 +2237,33 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
 }
 .gradio-container .events-usage-log-table table {
   width:100% !important;
-  min-width:460px !important;
-  table-layout:fixed !important;
+  min-width:560px !important;
+  table-layout:auto !important;
 }
 .gradio-container .events-usage-log-table th,
 .gradio-container .events-usage-log-table td {
   box-sizing:border-box !important;
-  padding:10px 12px !important;
-  white-space:normal !important;
-  word-break:normal !important;
-  overflow-wrap:break-word !important;
+  padding:11px 14px !important;
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  overflow-wrap:normal !important;
   hyphens:none !important;
   font-family:inherit !important;
   font-size:14px !important;
-  line-height:1.35 !important;
+  line-height:1.4 !important;
   vertical-align:middle !important;
 }
 .gradio-container .events-usage-log-table th:first-child,
-.gradio-container .events-usage-log-table td:first-child { width:34% !important; }
+.gradio-container .events-usage-log-table td:first-child { min-width:180px !important; }
 .gradio-container .events-usage-log-table th:not(:first-child),
-.gradio-container .events-usage-log-table td:not(:first-child) { width:22% !important; }
+.gradio-container .events-usage-log-table td:not(:first-child) { min-width:120px !important; }
 @media(max-width:760px) {
+  .gradio-container .events-usage-log-table table { min-width:560px !important; }
   .gradio-container .events-usage-log-table th,
   .gradio-container .events-usage-log-table td {
-    padding:9px 10px !important;
+    padding:10px 12px !important;
     font-size:13px !important;
-    line-height:1.3 !important;
+    line-height:1.35 !important;
   }
 }
 
