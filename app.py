@@ -3586,6 +3586,88 @@ APP_CSS += r"""
   }
 }
 
+
+/* Completion dialog: keep every mobile column readable and aligned. */
+.tla-completion-modal .tla-completion-dialog,
+.tla-completion-modal .tla-completion-dialog * {
+  writing-mode: horizontal-tb !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  hyphens: none !important;
+}
+.tla-completion-modal .tla-completion-header,
+.tla-completion-modal .tla-completion-row {
+  display: grid !important;
+  grid-template-columns: minmax(130px, 1.35fr) minmax(76px, .7fr) minmax(128px, 1.15fr) !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+}
+.tla-completion-modal .tla-completion-header > *,
+.tla-completion-modal .tla-completion-row > * {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  flex: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+.tla-completion-modal .tla-completion-header > * {
+  line-height: 1.25 !important;
+  white-space: normal !important;
+  text-align: left !important;
+}
+.tla-completion-modal .tla-completion-header p,
+.tla-completion-modal .tla-completion-header strong {
+  white-space: normal !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+.tla-completion-modal .tla-completion-row input {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 46px !important;
+  min-height: 46px !important;
+  padding: 7px 9px !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+.tla-completion-modal .tla-completion-row > :nth-child(2) input,
+.tla-completion-modal .tla-completion-row > :nth-child(3) input {
+  text-align: center !important;
+}
+@media (max-width: 760px) {
+  .tla-completion-modal .tla-completion-dialog {
+    overflow-x: auto !important;
+    padding: 12px !important;
+  }
+  .tla-completion-modal .tla-completion-header,
+  .tla-completion-modal .tla-completion-row {
+    grid-template-columns: minmax(116px, 1.2fr) minmax(64px, .65fr) minmax(116px, 1.15fr) !important;
+    gap: 6px !important;
+  }
+  .tla-completion-modal .tla-completion-header > * {
+    font-size: 11px !important;
+    line-height: 1.25 !important;
+  }
+  .tla-completion-modal .tla-completion-row input {
+    height: 44px !important;
+    min-height: 44px !important;
+    padding: 6px 7px !important;
+    font-size: 13px !important;
+  }
+  .tla-completion-modal .tla-completion-actions {
+    gap: 9px !important;
+  }
+}
+
 """
 
 if __name__ == "__main__":
