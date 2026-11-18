@@ -972,7 +972,14 @@ def event_stock_delete_button_state(event_id, confirmation):
 
 
 def manage_event_button_state(event_id):
-    return gr.update(interactive=bool(event_id))
+    if not event_id:
+        return gr.update(interactive=False, visible=False)
+    try:
+        event = event_stock_get(event_id)
+        is_active = event.get("status", "active") != "completed"
+        return gr.update(interactive=is_active, visible=is_active)
+    except Exception:
+        return gr.update(interactive=False, visible=False)
 
 
 def event_completion_button_state(event_id):
@@ -980,9 +987,10 @@ def event_completion_button_state(event_id):
         return gr.update(interactive=False)
     try:
         event = event_stock_get(event_id)
-        return gr.update(interactive=event.get("status", "active") != "completed")
+        is_active = event.get("status", "active") != "completed"
+        return gr.update(interactive=is_active, visible=is_active)
     except Exception:
-        return gr.update(interactive=False)
+        return gr.update(interactive=False, visible=False)
 
 
 def event_stock_create(name, event_date):
@@ -2223,45 +2231,32 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
     max-width:100% !important;
   }
 }
-/* Closed-event usage log: keep data readable on narrow Android screens. */
+/* Compact, readable closed-event report on phones. */
 .gradio-container .events-usage-log-table,
 .gradio-container .events-usage-log-table .table-wrap,
 .gradio-container .events-usage-log-table .table-container {
-  width:100% !important;
-  max-width:100% !important;
-  min-width:0 !important;
-  overflow-x:auto !important;
-  -webkit-overflow-scrolling:touch !important;
+  width:100% !important; max-width:100% !important; min-width:0 !important;
+  overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;
 }
 .gradio-container .events-usage-log-table table {
-  width:100% !important;
-  min-width:560px !important;
-  table-layout:auto !important;
+  width:100% !important; min-width:0 !important; table-layout:fixed !important;
 }
 .gradio-container .events-usage-log-table th,
 .gradio-container .events-usage-log-table td {
-  box-sizing:border-box !important;
-  padding:11px 14px !important;
-  white-space:nowrap !important;
-  word-break:keep-all !important;
-  overflow-wrap:normal !important;
-  hyphens:none !important;
-  font-family:inherit !important;
-  font-size:14px !important;
-  line-height:1.4 !important;
-  vertical-align:middle !important;
+  box-sizing:border-box !important; padding:7px 6px !important;
+  white-space:normal !important; word-break:normal !important;
+  overflow-wrap:anywhere !important; hyphens:none !important;
+  font-family:Arial,sans-serif !important; font-size:12px !important;
+  line-height:1.25 !important; vertical-align:middle !important;
 }
 .gradio-container .events-usage-log-table th:first-child,
-.gradio-container .events-usage-log-table td:first-child { min-width:180px !important; }
+.gradio-container .events-usage-log-table td:first-child { width:34% !important; }
 .gradio-container .events-usage-log-table th:not(:first-child),
-.gradio-container .events-usage-log-table td:not(:first-child) { min-width:120px !important; }
+.gradio-container .events-usage-log-table td:not(:first-child) { width:22% !important; }
 @media(max-width:760px) {
-  .gradio-container .events-usage-log-table table { min-width:560px !important; }
   .gradio-container .events-usage-log-table th,
   .gradio-container .events-usage-log-table td {
-    padding:10px 12px !important;
-    font-size:13px !important;
-    line-height:1.35 !important;
+    padding:6px 4px !important; font-size:11px !important; line-height:1.2 !important;
   }
 }
 
@@ -3000,6 +2995,41 @@ APP_CSS += r"""
   }
 }
 
+
+/* Simple one-column mobile forms: prevent squeezed fields and buttons. */
+@media (max-width:760px) {
+  .gradio-container .inventory-page .inventory-add-panel > .row,
+  .gradio-container .inventory-page .inventory-adjust-panel > .row,
+  .gradio-container .inventory-page .inventory-mobile-stack,
+  .gradio-container .event-stock-page > .row,
+  .gradio-container .event-stock-page .row {
+    display:flex !important; flex-direction:column !important; flex-wrap:nowrap !important;
+    align-items:stretch !important; gap:12px !important; width:100% !important; min-width:0 !important;
+  }
+  .gradio-container .inventory-page .inventory-add-panel > .row > *,
+  .gradio-container .inventory-page .inventory-adjust-panel > .row > *,
+  .gradio-container .inventory-page .inventory-mobile-stack > *,
+  .gradio-container .event-stock-page .row > * {
+    flex:0 0 auto !important; width:100% !important; max-width:100% !important;
+    min-width:0 !important; box-sizing:border-box !important;
+  }
+  .gradio-container .event-stock-page button,
+  .gradio-container .inventory-page button {
+    width:100% !important; max-width:100% !important; min-height:48px !important;
+    height:auto !important; padding:11px 14px !important; font-size:14px !important;
+    line-height:1.25 !important; white-space:normal !important; overflow-wrap:anywhere !important;
+  }
+  .gradio-container .event-stock-page button span,
+  .gradio-container .inventory-page button span {
+    font-size:14px !important; line-height:1.25 !important; white-space:normal !important;
+  }
+  .gradio-container .inventory-page input,
+  .gradio-container .inventory-page [role="combobox"],
+  .gradio-container .event-stock-page input,
+  .gradio-container .event-stock-page [role="combobox"] {
+    width:100% !important; max-width:100% !important; min-width:0 !important; box-sizing:border-box !important;
+  }
+}
 
 /* Mobile-only inventory cards and grouped form panels. */
 @media (max-width: 760px) {
