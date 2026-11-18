@@ -2337,7 +2337,7 @@ APP_CSS += r"""
 }
 .tla-mobile-nav {
   display: grid !important;
-  grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) !important;
   gap: 8px !important;
   width: 100% !important;
   padding: 8px !important;
@@ -2382,7 +2382,7 @@ APP_CSS += r"""
   max-width: 850px !important;
 }
 @media (min-width: 761px) {
-  .tla-mobile-nav { grid-template-columns: repeat(6, minmax(110px, 1fr)) !important; }
+  .tla-mobile-nav { grid-template-columns: repeat(7, minmax(90px, 1fr)) !important; }
   .tla-page { padding: 22px !important; }
   .tla-ai-header-row { flex-direction: row !important; }
 }
@@ -2460,7 +2460,7 @@ APP_CSS += r"""
 }
 .gradio-container .row.tla-mobile-nav > *,
 .tla-mobile-nav > * {
-  flex: 1 1 calc(16.666% - 8px) !important;
+  flex: 1 1 calc(14.2857% - 8px) !important;
   width: auto !important;
   min-width: 0 !important;
   max-width: none !important;
@@ -2496,7 +2496,7 @@ APP_CSS += r"""
 @media (max-width: 760px) {
   .gradio-container .row.tla-mobile-nav > *,
   .tla-mobile-nav > * {
-    flex-basis: calc(33.333% - 8px) !important;
+    flex-basis: calc(25% - 8px) !important;
   }
   .tla-mobile-nav button,
   .gradio-container .row.tla-mobile-nav button,
