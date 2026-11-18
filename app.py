@@ -984,13 +984,28 @@ def manage_event_button_state(event_id):
 
 def event_completion_button_state(event_id):
     if not event_id:
-        return gr.update(interactive=False)
+        return gr.update(interactive=False, visible=False)
     try:
         event = event_stock_get(event_id)
         is_active = event.get("status", "active") != "completed"
         return gr.update(interactive=is_active, visible=is_active)
     except Exception:
         return gr.update(interactive=False, visible=False)
+
+
+def events_management_button_states(event_id, status_filter="Active"):
+    """Only show management actions for a selected active event."""
+    if not event_id or (status_filter or "Active") == "Closed":
+        hidden = gr.update(interactive=False, visible=False)
+        return hidden, hidden
+    try:
+        event = event_stock_get(event_id)
+        is_active = event.get("status", "active") != "completed"
+        state = gr.update(interactive=is_active, visible=is_active)
+        return state, state
+    except Exception:
+        hidden = gr.update(interactive=False, visible=False)
+        return hidden, hidden
 
 
 def event_stock_create(name, event_date):
@@ -2239,20 +2254,26 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
   overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;
 }
 .gradio-container .events-usage-log-table table {
-  width:100% !important; min-width:0 !important; table-layout:fixed !important;
+  width:100% !important; min-width:480px !important; table-layout:auto !important;
+}
+.gradio-container .events-usage-log h3 {
+  font-size:15px !important; line-height:1.25 !important; margin:4px 0 !important;
+}
+.gradio-container .events-usage-log p {
+  font-size:12px !important; line-height:1.3 !important; margin:4px 0 8px !important;
 }
 .gradio-container .events-usage-log-table th,
 .gradio-container .events-usage-log-table td {
-  box-sizing:border-box !important; padding:7px 6px !important;
-  white-space:normal !important; word-break:normal !important;
-  overflow-wrap:anywhere !important; hyphens:none !important;
-  font-family:Arial,sans-serif !important; font-size:12px !important;
-  line-height:1.25 !important; vertical-align:middle !important;
+  box-sizing:border-box !important; padding:6px 7px !important;
+  white-space:nowrap !important; word-break:keep-all !important;
+  overflow-wrap:normal !important; hyphens:none !important;
+  font-family:Arial,sans-serif !important; font-size:10px !important;
+  line-height:1.2 !important; vertical-align:middle !important;
 }
 .gradio-container .events-usage-log-table th:first-child,
-.gradio-container .events-usage-log-table td:first-child { width:34% !important; }
+.gradio-container .events-usage-log-table td:first-child { min-width:150px !important; }
 .gradio-container .events-usage-log-table th:not(:first-child),
-.gradio-container .events-usage-log-table td:not(:first-child) { width:22% !important; }
+.gradio-container .events-usage-log-table td:not(:first-child) { min-width:82px !important; }
 @media(max-width:760px) {
   .gradio-container .events-usage-log-table th,
   .gradio-container .events-usage-log-table td {
@@ -2438,7 +2459,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 events_manage_button = gr.Button("Manage selected event", variant="primary", interactive=False)
                 events_complete_button = gr.Button("Complete selected event", variant="primary", interactive=False)
                 events_usage_log_button = gr.Button("View usage log", interactive=False)
-            with gr.Group(visible=False) as events_usage_log_group:
+            with gr.Group(visible=False, elem_classes=["events-usage-log"]) as events_usage_log_group:
                 events_usage_log_title = gr.Markdown()
                 events_usage_log_table = gr.Dataframe(
                     headers=["Item", "Allocated", "Used", "Returned"],
@@ -2450,7 +2471,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
             gr.Markdown("### Event Stock")
             gr.Markdown("Each active event has its own saved sheet. Allocations deduct from main Inventory; completing an event records actual use and returns unused stock. Completed event records remain saved.")
-            with gr.Row():
+            with gr.Row(elem_classes=["event-stock-create-row"]):
                 event_selector = gr.Dropdown(label="Event", choices=[], value=None, interactive=True, scale=2)
                 event_new_name = gr.Textbox(label="New event name", placeholder="e.g. Name of client", scale=2)
                 event_new_date = gr.DateTime(label="Event date", include_time=False, type="string", scale=2)
@@ -2643,9 +2664,9 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         manage_event_button_state, inputs=dashboard_event_picker, outputs=dashboard_manage_event_button
     )
     events_event_picker.change(
-        manage_event_button_state, inputs=events_event_picker, outputs=events_manage_button
-    ).then(
-        event_completion_button_state, inputs=events_event_picker, outputs=events_complete_button
+        events_management_button_states,
+        inputs=[events_event_picker, events_filter],
+        outputs=[events_manage_button, events_complete_button],
     ).then(
         event_usage_log_button_state, inputs=events_event_picker,
         outputs=[events_usage_log_button, events_usage_log_group, events_usage_log_title, events_usage_log_table],
@@ -3384,6 +3405,49 @@ APP_CSS += r"""
     padding:6px 4px !important;
     font-size:11px !important;
     line-height:1.2 !important;
+  }
+}
+
+
+/* Final mobile corrections for event navigation and creation controls. */
+@media (max-width:760px) {
+  .gradio-container .row.tla-mobile-nav,
+  .gradio-container .tla-mobile-nav {
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    grid-auto-rows:minmax(48px,auto) !important;
+    gap:8px !important;
+    width:100% !important;
+    min-width:0 !important;
+  }
+  .gradio-container .row.tla-mobile-nav > *,
+  .gradio-container .tla-mobile-nav > * {
+    width:100% !important; min-width:0 !important; max-width:100% !important; flex:none !important;
+  }
+  .gradio-container .row.tla-mobile-nav button,
+  .gradio-container .tla-mobile-nav button {
+    min-height:48px !important; height:auto !important; padding:8px 6px !important;
+    font-size:12px !important; line-height:1.2 !important; white-space:normal !important;
+    overflow-wrap:break-word !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row {
+    display:flex !important; flex-direction:column !important; align-items:stretch !important;
+    gap:10px !important; width:100% !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row > * {
+    width:100% !important; max-width:100% !important; min-width:0 !important; flex:0 0 auto !important;
+  }
+  .gradio-container .event-stock-page .event-stock-create-row button {
+    min-height:44px !important; font-size:13px !important;
+  }
+  .gradio-container .events-usage-log-table,
+  .gradio-container .events-usage-log-table .table-wrap,
+  .gradio-container .events-usage-log-table .table-container {
+    overflow-x:auto !important; -webkit-overflow-scrolling:touch !important;
+  }
+  .gradio-container .events-usage-log-table th,
+  .gradio-container .events-usage-log-table td {
+    font-size:10px !important; padding:6px 7px !important;
   }
 }
 
