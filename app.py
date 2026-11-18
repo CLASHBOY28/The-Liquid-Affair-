@@ -721,14 +721,12 @@ def refresh_event_views(status_filter="Active", events=None):
         gr.update(choices=management_choices, value=None),
         gr.update(choices=management_choices, value=None),
         gr.update(interactive=False),
-        gr.update(interactive=False),
-        gr.update(interactive=False),
+        gr.update(interactive=False, visible=status_filter != "Closed"),
+        gr.update(interactive=False, visible=status_filter != "Closed"),
         gr.update(interactive=False),
         gr.update(visible=False),
         "",
         gr.update(value=[], headers=["Item", "Allocated", "Used", "Returned"]),
-        gr.update(visible=status_filter != "Closed"),
-        gr.update(visible=status_filter != "Closed"),
     )
 
 
@@ -2592,7 +2590,6 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         event_rename_selector, event_delete_selector,
         dashboard_manage_event_button, events_manage_button, events_complete_button,
         events_usage_log_button, events_usage_log_group, events_usage_log_title, events_usage_log_table,
-        events_manage_button, events_complete_button,
     ]
 
     for index, nav_button in enumerate(page_buttons):
