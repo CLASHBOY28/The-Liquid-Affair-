@@ -668,7 +668,7 @@ def event_overview_rows(status_filter="Active"):
         item_index = columns.index("item") if "item" in columns else 0
         item_rows = sum(
             1 for row in (event.get("rows") or [])
-            if item_index < len(row) and str(row[item_index] or "").strip()
+            if row is not None and item_index < len(row) and str(row[item_index] or "").strip()
         )
         result.append([
             event.get("name", ""),
@@ -708,6 +708,8 @@ def refresh_event_views(status_filter="Active"):
         gr.update(choices=event_overview_choices(status_filter), value=None),
         gr.update(choices=event_management_choices(), value=None),
         gr.update(choices=event_management_choices(), value=None),
+        gr.update(interactive=False),
+        gr.update(interactive=False),
     )
 
 
@@ -940,6 +942,11 @@ def event_stock_delete_button_state(event_id, confirmation):
         return gr.update(interactive=bool(allowed))
     except Exception:
         return gr.update(interactive=False)
+
+
+def manage_event_button_state(event_id):
+    return gr.update(interactive=bool(event_id))
+
 
 def event_stock_create(name):
     try:
@@ -2107,7 +2114,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 dashboard_event_picker = gr.Dropdown(
                     label="Select active event", choices=[], value=None, interactive=True, scale=2
                 )
-                dashboard_manage_event_button = gr.Button("Manage selected event", variant="primary")
+                dashboard_manage_event_button = gr.Button("Manage selected event", variant="primary", interactive=False)
                 dashboard_all_events_button = gr.Button("View all events")
             dashboard_event_status = gr.Markdown()
         with gr.Column(visible=False, elem_classes=["tla-page", "inventory-page"]) as inventory_page:
@@ -2238,7 +2245,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 events_event_picker = gr.Dropdown(
                     label="Select event to manage", choices=[], value=None, interactive=True, scale=2
                 )
-                events_manage_button = gr.Button("Manage selected event", variant="primary")
+                events_manage_button = gr.Button("Manage selected event", variant="primary", interactive=False)
             events_status = gr.Markdown()
 
         with gr.Column(visible=False, elem_classes=["tla-page", "event-stock-page"]) as event_stock_page:
@@ -2302,6 +2309,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         dashboard_active_event_table, dashboard_event_picker,
         events_table, events_event_picker,
         event_rename_selector, event_delete_selector,
+        dashboard_manage_event_button, events_manage_button,
     ]
 
     for index, nav_button in enumerate(page_buttons):
@@ -2354,6 +2362,12 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         inputs=[event_delete_selector,event_delete_confirm], outputs=event_delete_button,
     )
     events_filter.change(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
+    dashboard_event_picker.change(
+        manage_event_button_state, inputs=dashboard_event_picker, outputs=dashboard_manage_event_button
+    )
+    events_event_picker.change(
+        manage_event_button_state, inputs=events_event_picker, outputs=events_manage_button
+    )
     for manage_button, manage_picker in [
         (dashboard_manage_event_button, dashboard_event_picker),
         (events_manage_button, events_event_picker),
@@ -2364,7 +2378,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         )
     dashboard_all_events_button.click(
         fn=lambda: select_page(5), outputs=page_columns + page_buttons, queue=False
-    )
+    ).then(refresh_event_views, inputs=[events_filter], outputs=event_view_outputs)
     event_add_inventory_button.click(
         event_stock_add_inventory_item, inputs=[event_selector,event_item_picker,event_item_quantity,event_table],
         outputs=[event_status,event_table,event_completion_table]
