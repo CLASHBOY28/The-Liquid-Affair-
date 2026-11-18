@@ -459,8 +459,10 @@ def save_item(name, category, quantity, threshold, unit, expiry_date=None, actor
         category = suggest_category_for_item(name)
     if not name or not category:
         raise ValueError("I couldn't confidently identify a category for this new item. Please tell me its category once.")
-    if quantity is None or int(quantity) < 0 or threshold is None or int(threshold) < 0:
-        raise ValueError("Quantity and reorder threshold must be zero or greater.")
+    if quantity is None or int(quantity) < 1:
+        raise ValueError("Enter a quantity greater than 0 before saving an item.")
+    if threshold is None or int(threshold) < 0:
+        raise ValueError("Reorder threshold must be zero or greater.")
     quantity, threshold = int(quantity), int(threshold)
     expiry_date = (expiry_date or "").strip() or None
     if expiry_date:
@@ -798,9 +800,10 @@ def event_stock_initial():
         choices=[(event_stock_label(e),str(e["id"])) for e in events]
         if not events:
             return gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),"","",gr.update(value=[],headers=["Item","Allocated","Used","Returned"]),"Create your first event."
-        e=events[0]
-        table,rename,confirm,completion,status=event_stock_update(e)
-        return gr.update(choices=choices,value=str(e["id"])),table,rename,confirm,completion,status
+        return (gr.update(choices=choices,value=None),
+                gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),
+                "", "", gr.update(value=[],headers=["Item","Allocated","Used","Returned"]),
+                "Select an event to view its stock, or create a new one.")
     except Exception as exc:
         return gr.update(choices=[],value=None),gr.update(value=[["","","",""]],headers=EVENT_STOCK_DEFAULT_COLUMNS),"","",gr.update(value=[],headers=["Item","Allocated","Used","Returned"]),"Setup required: run event_stock_migration.sql in Supabase SQL Editor, then refresh. "+str(exc)
 
@@ -1022,8 +1025,8 @@ TOOLS = [
      "description": "Add an inventory item or set its exact quantity. Category is optional: infer it from the existing item saved in inventory. Never ask for category when the item name matches one existing inventory item.",
      "parameters": {"type": "object", "properties": {
          "name": {"type": "string"}, "category": {"type": "string", "description": "Optional. For existing items, omit this and use the saved category."},
-         "quantity": {"type": "integer", "minimum": 0},
-         "reorder_threshold": {"type": "integer", "minimum": 0},
+         "quantity": {"type": "integer", "minimum": 1},
+         "reorder_threshold": {"type": "integer", "minimum": 0, "default": 3},
          "unit": {"type": "string"},
          "expiry_date": {"type": "string", "description": "Optional expiry date in YYYY-MM-DD format"}},
          "required": ["name", "quantity"]}}},
@@ -1062,7 +1065,7 @@ def execute_tool(name: str, args: dict[str, Any], actor=None) -> str:
             return calculate_math(args["expression"])
         if name == "add_or_update_item":
             return save_item(args["name"], args.get("category"), args["quantity"],
-                             args.get("reorder_threshold", 5), args.get("unit", "pcs"),
+                             args.get("reorder_threshold", 3), args.get("unit", "pcs"),
                              args.get("expiry_date"), actor=actor)
         if name == "adjust_stock":
             return adjust_item(args["name"], args.get("category"), args["delta"], actor)
@@ -1420,11 +1423,11 @@ def refresh_all():
         gr.update(value=inventory_rows(low_only=True), headers=inventory_headers()),
         [[c["id"], c["name"]] for c in cats],
         audit_rows(),
-        gr.update(choices=unique_item_names(items)),
-        gr.update(choices=[c["name"] for c in cats]),
-        gr.update(choices=unique_item_names(items)),
-        gr.update(choices=[c["name"] for c in cats]),
-        gr.update(choices=[f["name"] for f in custom_fields_list()]),
+        gr.update(choices=unique_item_names(items), value=None),
+        gr.update(choices=[c["name"] for c in cats], value=None),
+        gr.update(choices=unique_item_names(items), value=None),
+        gr.update(choices=[c["name"] for c in cats], value=None),
+        gr.update(choices=[f["name"] for f in custom_fields_list()], value=None),
         mobile_inventory_cards(),
         mobile_inventory_cards(low_only=True),
         mobile_category_cards(),
@@ -1963,21 +1966,21 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 gr.Markdown("#### Add item or set its exact stock")
                 with gr.Row(elem_classes=["inventory-mobile-stack"]):
                     item_name = gr.Dropdown(
-                        label="Item name", choices=[], allow_custom_value=True, filterable=True,
+                        label="Item name", choices=[], value=None, allow_custom_value=True, filterable=True,
                         info="Choose an existing item or type a new name.",
                     )
                     item_category = gr.Dropdown(label="Category", choices=[], allow_custom_value=True, info="Auto-suggests a category as you type; you can change it.")
                 with gr.Row(elem_classes=["inventory-mobile-stack", "inventory-quantity-row"]):
                     item_quantity = gr.Number(
-                        label="Exact quantity", value=0, precision=0,
-                        info="The total amount currently in stock for this item type.",
+                        label="Exact quantity", value=0, precision=0, minimum=0,
+                        info="The total amount currently in stock. Enter at least 1 before saving.",
                     )
                     item_unit = gr.Textbox(
                         label="Type", value="bottles",
                         info="Enter how this item is counted, such as packs, bottles, or pieces.",
                     )
                     item_threshold = gr.Number(
-                        label="Reorder threshold", value=5, precision=0,
+                        label="Reorder threshold", value=3, precision=0, minimum=0,
                         info="Shows a low-stock alert when the quantity reaches or falls below this number.",
                     )
                 item_name.change(
@@ -1995,8 +1998,8 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                     "For example, +5 adds five and -2 removes two."
                 )
                 with gr.Row(elem_classes=["inventory-mobile-stack", "inventory-adjust-row"]):
-                    adjust_name = gr.Dropdown(label="Select existing item", choices=[], interactive=True)
-                    adjust_category = gr.Dropdown(label="Select category", choices=[], interactive=True)
+                    adjust_name = gr.Dropdown(label="Select existing item", choices=[], value=None, interactive=True)
+                    adjust_category = gr.Dropdown(label="Select category", choices=[], value=None, interactive=True)
                     adjust_delta = gr.Number(
                         label="Stock change (+/-)", precision=0,
                         info="Use + to add received stock and - to subtract used or lost stock.",
@@ -2033,7 +2036,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 custom_field_type = gr.Dropdown(label="Value type", choices=["text", "number", "date"], value="text")
                 add_field_button = gr.Button("Add column", variant="primary")
                 field_status = gr.Markdown()
-                manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()])
+                manage_field = gr.Dropdown(label="Custom column", choices=[f["name"] for f in custom_fields_list()], value=None)
                 move_direction = gr.Radio(choices=["up", "down"], value="up", label="Move")
                 move_field_button = gr.Button("Move column")
                 remove_field_button = gr.Button("Remove column", variant="stop")
