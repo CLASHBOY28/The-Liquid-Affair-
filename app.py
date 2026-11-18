@@ -727,6 +727,8 @@ def refresh_event_views(status_filter="Active", events=None):
         gr.update(visible=False),
         "",
         gr.update(value=[], headers=["Item", "Allocated", "Used", "Returned"]),
+        gr.update(visible=status_filter != "Closed"),
+        gr.update(visible=status_filter != "Closed"),
     )
 
 
@@ -2223,6 +2225,47 @@ html, body { width:100%; min-width:320px; margin:0; overflow-x:hidden; }
     max-width:100% !important;
   }
 }
+/* Closed-event usage log: keep data readable on narrow Android screens. */
+.gradio-container .events-usage-log-table,
+.gradio-container .events-usage-log-table .table-wrap,
+.gradio-container .events-usage-log-table .table-container {
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  overflow-x:auto !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+.gradio-container .events-usage-log-table table {
+  width:100% !important;
+  min-width:460px !important;
+  table-layout:fixed !important;
+}
+.gradio-container .events-usage-log-table th,
+.gradio-container .events-usage-log-table td {
+  box-sizing:border-box !important;
+  padding:10px 12px !important;
+  white-space:normal !important;
+  word-break:normal !important;
+  overflow-wrap:break-word !important;
+  hyphens:none !important;
+  font-family:inherit !important;
+  font-size:14px !important;
+  line-height:1.35 !important;
+  vertical-align:middle !important;
+}
+.gradio-container .events-usage-log-table th:first-child,
+.gradio-container .events-usage-log-table td:first-child { width:34% !important; }
+.gradio-container .events-usage-log-table th:not(:first-child),
+.gradio-container .events-usage-log-table td:not(:first-child) { width:22% !important; }
+@media(max-width:760px) {
+  .gradio-container .events-usage-log-table th,
+  .gradio-container .events-usage-log-table td {
+    padding:9px 10px !important;
+    font-size:13px !important;
+    line-height:1.3 !important;
+  }
+}
+
 """
 
 
@@ -2406,6 +2449,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 events_usage_log_table = gr.Dataframe(
                     headers=["Item", "Allocated", "Used", "Returned"],
                     value=[], interactive=False, wrap=True,
+                    elem_classes=["events-usage-log-table"],
                 )
             events_status = gr.Markdown()
 
@@ -2547,6 +2591,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
         event_rename_selector, event_delete_selector,
         dashboard_manage_event_button, events_manage_button, events_complete_button,
         events_usage_log_button, events_usage_log_group, events_usage_log_title, events_usage_log_table,
+        events_manage_button, events_complete_button,
     ]
 
     for index, nav_button in enumerate(page_buttons):
