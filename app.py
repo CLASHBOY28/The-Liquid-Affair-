@@ -2570,6 +2570,7 @@ with gr.Blocks(title="The Liquid Affair | Inventory") as demo:
                 ],
                 completion_instructions, completion_modal,
             ],
+            queue=False,
         )
     completion_cancel_button.click(
         lambda: (gr.update(visible=False), ""),
